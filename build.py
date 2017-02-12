@@ -35,21 +35,39 @@
 import os
 import sys
 import fnmatch
-
+import logging
+import ConfigParser
 
 _TOP_DIR = os.getenv("TOP", os.getcwd())
 _ROOTFS_DIR = os.getenv("ROOTFS", os.getcwd() + "/rootfs")
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.getcwd() + "/target-recipes")
 _BOARD_CONF_FILE_PATTERN = "board.conf"
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+def glob_recursive(root, pattern):
+    file_list = []
+    for subdir, dirs, files in os.walk(root):
+        for file in fnmatch.filter(files, pattern):
+            file_list.append(os.path.join(subdir, file))
+
+    return file_list
+
 def get_recipes_list():
     board_conf_files = []
 
+    # get the list of config files
+    conf_files = glob_recursive(_TARGET_RECIPES_DIR, _BOARD_CONF_FILE_PATTERN)
     for subdir, dirs, files in os.walk(_TARGET_RECIPES_DIR):
         for file in fnmatch.filter(files, _BOARD_CONF_FILE_PATTERN):
             board_conf_files.append(os.path.join(subdir, file))
 
-    print board_conf_files
+    #read the board config files
+    config = ConfigParser.ConfigParser()
+    for f in conf_files:
+        config.read(f)
 
 if __name__ == '__main__':
 
