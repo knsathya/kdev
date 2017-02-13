@@ -38,10 +38,11 @@ import fnmatch
 import logging
 import ConfigParser
 
-_TOP_DIR = os.getenv("TOP", os.getcwd())
-_ROOTFS_DIR = os.getenv("ROOTFS", os.getcwd() + "/rootfs")
+_TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
+_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.getcwd() + "/rootfs")
+_KERNEL_DIR = os.getenv("KDEV_KERNEL", os.getcwd() + "/kernel")
+_OUT_DIR = os.getenv("KDEV_OUT", os.getcwd() + "/out")
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.getcwd() + "/target-recipes")
-_BOARD_CONF_FILE_PATTERN = "board.conf"
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -55,21 +56,127 @@ def glob_recursive(root, pattern):
 
     return file_list
 
-def get_recipes_list():
-    board_conf_files = []
+class BoardConfigParser(object):
+    #Minimum config file sections
+    min_cfg_sections = ['BUILD_OPTIONS']
+    #Minimum config file optioons
+    min_cfg_options = ['arch', 'soc_name', 'board_name', 'version']
+    #Build section name
+    build_section_name = "BUILD_OPTIONS"
 
-    # get the list of config files
-    conf_files = glob_recursive(_TARGET_RECIPES_DIR, _BOARD_CONF_FILE_PATTERN)
-    for subdir, dirs, files in os.walk(_TARGET_RECIPES_DIR):
-        for file in fnmatch.filter(files, _BOARD_CONF_FILE_PATTERN):
-            board_conf_files.append(os.path.join(subdir, file))
+    def __init__(self, cfg):
+        self.cfg_file = cfg
+        try:
+            self.parser = ConfigParser.ConfigParser()
+            self.parser.read(self.cfg_file)
+        except ConfigParser.ParsingError, err:
+            print 'cfg parse error:', err
 
-    #read the board config files
-    config = ConfigParser.ConfigParser()
-    for f in conf_files:
-        config.read(f)
+        sections = self.parser.sections()
+
+        assert set(BoardConfigParser.min_cfg_sections).issubset(set(sections)), \
+            self.cfg_file + " : Missing section error"
+
+        build_options = self.parser.options(BoardConfigParser.build_section_name)
+
+        assert set(BoardConfigParser.min_cfg_options).issubset(set(build_options)), \
+            self.cfg_file + " : Missing option error"
+
+        self.arch_name = self.parser.get(BoardConfigParser.build_section_name, "arch")
+        self.soc_name = self.parser.get(BoardConfigParser.build_section_name, "soc_name")
+        self.board_name = self.parser.get(BoardConfigParser.build_section_name, "board_name")
+        self.version_name = self.parser.get(BoardConfigParser.build_section_name, "version")
+
+    def __str__(self):
+        return "Arch = " + self.arch_name + "\n" + "SOC  = " + self.soc_name + "\n" +\
+               "BOARD = " + self.board_name + "\n" + "VERSION = " + self.version_name
+
+
+class BuildRecipe(object):
+    board_conf_file_pattern = "board.cfg"
+    kernel_cmdline_file_pattern = "cmdline"
+    kernel_config_file_pattern = "kernel.config"
+
+    def __init__(self, root):
+
+        if not os.path.isdir(root):
+            raise AttributeError
+
+        board_conf_file = root + "/" + BuildRecipe.board_conf_file_pattern
+        if not os.path.isfile(board_conf_file):
+            logger.warn("%s: kernel config file missing", root)
+            raise IOError
+
+        try:
+            self.bconf_parser = BoardConfigParser(board_conf_file)
+            self.board_config = board_conf_file
+        except AssertionError:
+            logger.warn("%s: config file parse error", board_conf_file)
+            raise AssertionError
+
+        kernel_config_file = root + "/" + BuildRecipe.kernel_config_file_pattern
+        if not os.path.isfile(kernel_config_file):
+            logger.warn("%s: kernel config file missing", root)
+            raise IOError
+
+        self.kernel_config = kernel_config_file
+
+        kernel_cmdline_file = root + "/" + BuildRecipe.kernel_cmdline_file_pattern
+        if not os.path.isfile(kernel_cmdline_file):
+            logger.warn("%s: kernel cmdline file missing", root)
+
+        self.kernel_cmdline = kernel_cmdline_file
+
+    def build_name(self):
+        return self.bconf_parser.soc_name + "_" + self.bconf_parser.board_name +\
+               "_" + self.bconf_parser.version_name
+
+    def __str__(self):
+        return self.build_name()
+
+
+
+def build_main():
+
+    valid_recipes = []
+    recipe = None
+    selected_target = None
+
+    # get the list of valid recipes
+    target_dirs = map(lambda x: os.path.dirname(os.path.realpath(x)),
+                      glob_recursive(_TARGET_RECIPES_DIR, BuildRecipe.board_conf_file_pattern))
+
+    for target_dir in target_dirs:
+        try:
+            recipe = BuildRecipe(target_dir)
+        except Exception as e:
+            logger.warn("Invalid Recipe in %s", target_dir)
+            recipe = None
+
+        if recipe is not None:
+            logger.debug("valid recipe %s", recipe)
+            valid_recipes.append(recipe)
+
+    user_input = -1
+
+    while not 0 <= user_input < len(valid_recipes):
+        print "Build targets available:"
+        index = 0
+        for recipe in valid_recipes:
+            index = index + 1
+            print str(index) + " : " + str(recipe)
+
+        user_input = raw_input("Please select build target: \n")
+        if user_input.isdigit():
+            user_input = int(user_input) - 1
+        else:
+            user_input = -1
+
+    selected_target = valid_recipes[user_input]
+
+    logger.debug("Building target image for %s", selected_target)
 
 if __name__ == '__main__':
 
     print "test func"
-    get_recipes_list()
+    build_main()
