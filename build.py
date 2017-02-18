@@ -37,11 +37,14 @@ import sys
 import fnmatch
 import logging
 import ConfigParser
+import multiprocessing
+from pyparsing import *
 
 _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
-_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.getcwd() + "/rootfs")
-_KERNEL_DIR = os.getenv("KDEV_KERNEL", os.getcwd() + "/kernel")
-_OUT_DIR = os.getenv("KDEV_OUT", os.getcwd() + "/out")
+_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "/rootfs"))
+_KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "/kernel"))
+_OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
+_KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", os.path.join(os.getcwd(), "out/kernel-obj"))
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.getcwd() + "/target-recipes")
 
 logging.basicConfig(level=logging.DEBUG)
@@ -102,7 +105,7 @@ class BuildRecipe(object):
         if not os.path.isdir(root):
             raise AttributeError
 
-        board_conf_file = root + "/" + BuildRecipe.board_conf_file_pattern
+        board_conf_file = os.path.join(root, BuildRecipe.board_conf_file_pattern)
         if not os.path.isfile(board_conf_file):
             logger.warn("%s: kernel config file missing", root)
             raise IOError
@@ -114,14 +117,14 @@ class BuildRecipe(object):
             logger.warn("%s: config file parse error", board_conf_file)
             raise AssertionError
 
-        kernel_config_file = root + "/" + BuildRecipe.kernel_config_file_pattern
+        kernel_config_file = os.path.join(root, BuildRecipe.kernel_config_file_pattern)
         if not os.path.isfile(kernel_config_file):
             logger.warn("%s: kernel config file missing", root)
             raise IOError
 
         self.kernel_config = kernel_config_file
 
-        kernel_cmdline_file = root + "/" + BuildRecipe.kernel_cmdline_file_pattern
+        kernel_cmdline_file = os.path.join(root, BuildRecipe.kernel_cmdline_file_pattern)
         if not os.path.isfile(kernel_cmdline_file):
             logger.warn("%s: kernel cmdline file missing", root)
 
@@ -134,10 +137,7 @@ class BuildRecipe(object):
     def __str__(self):
         return self.build_name()
 
-
-
 def build_main():
-
     valid_recipes = []
     recipe = None
     selected_target = None
@@ -179,4 +179,4 @@ def build_main():
 if __name__ == '__main__':
 
     print "test func"
-    build_main()
+    #build_main()
