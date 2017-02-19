@@ -39,10 +39,17 @@ import logging
 import ConfigParser
 import multiprocessing
 from pyparsing import *
+import argparse
+import subprocess
+from shutil import copyfile
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+def exec_command(cmd):
+    logger.info("executing %s", ' '.join(cmd))
+    p = subprocess.call(cmd)
 
 class BuildKernel(object):
 
@@ -58,7 +65,7 @@ class BuildKernel(object):
             with open(os.path.join(self.kernel_dir, 'Makefile'), 'r') as makefile:
                 makefile_contents = makefile.read()
         except:
-            logger.error("Invalid kernel source directory")
+            logger.error("%s Invalid kernel source directory", self.kernel_dir)
             raise IOError
 
         key_value_format = lambda x, y: Combine(LineStart() + Literal(x) + restOfLine(y))
@@ -77,6 +84,11 @@ class BuildKernel(object):
             self.name = name_format.scanString(makefile_contents).next()[0].name
         except StopIteration:
             logger.error("Stop iteration exception")
+            logger.debug("version : %s", self.version)
+            logger.debug("patchlevel : %s", self.patchelevel)
+            logger.debug("sublevel : %s", self.sublevel)
+            logger.debug("extraversion : %s", self.extraversion)
+            logger.debug("name : %s", self.name)
             raise NameError
 
         # Initalize kernel version
@@ -92,7 +104,7 @@ class BuildKernel(object):
         self.build_params['out'] = os.path.join(os.getcwd(), "out")
 
         # Initalize config params
-        def_config_path = "arch/x86/config/x864_defconfig"
+        def_config_path = "arch/x86/configs/x86_64_defconfig"
         self.config = os.path.join(self.kernel_dir, def_config_path)
         self.update_config_list = {}
 
@@ -100,7 +112,7 @@ class BuildKernel(object):
         self.use_efi_header = False
         self.use_init_ramfs = False
 
-    def set_build_env(self, arch="x86_64", use_efi_header=False, rootfs="", out="", threads=multiprocessing.cpu_count()):
+    def set_build_env(self, arch="x86_64", config=None, use_efi_header=False, rootfs=None, out=None, threads=multiprocessing.cpu_count()):
         '''
         Set the build parameters for compilation.
         :param arch: Architecture to be used in compilation.
@@ -110,8 +122,9 @@ class BuildKernel(object):
         :param threads: No of threads to be used in compilation.
         :return: Throws exception if the input parameters are invalid.
         '''
-
-        if rootfs != "":
+        logger.debug(locals())
+        if rootfs is not None:
+            logger.debug("updating rootfs")
             if os.path.exists(rootfs):
                 self.use_init_ramfs = True
                 self.build_params['rootfs'] = rootfs
@@ -119,34 +132,48 @@ class BuildKernel(object):
                 logger.error("rootfs dir %s does not exist", rootfs)
                 raise AttributeError
 
-        if out != "":
+        if out is not None:
+            logger.debug("updating out")
             if os.path.exists(out):
                 self.build_params['out'] = out
             else:
                 logger.error("out dir %s does not exist", out)
                 raise AttributeError
 
-        self.use_efi_header = use_efi_header
+        if config is not None:
+            logger.debug("updating config")
+            if os.path.exists(config):
+                self.config = config
+            else:
+                logger.error("config file does not exist")
+                raise AttributeError
 
-        self.build_params['arch'] = arch
-        self.build_params['threads'] = threads
+        if not os.path.exists(self.build_params['out']):
+            os.mkdir(self.build_params['out'])
+
+        copyfile(self.config, os.path.join(self.build_params['out'],'.config'))
+
+        if use_efi_header is not None:
+            self.use_efi_header = use_efi_header
+
+        if arch is not None:
+            self.build_params['arch'] = arch
+
+        if threads is not None:
+            self.build_params['threads'] = threads
 
         logger.info(self.__str_build_params__())
 
-    def update_config_options(self, config="", update_config_list = []):
+    def update_config_options(self, update_config_list = []):
         '''
         Updates the .config with updates from config_list
-        :param config: kernel config file
         :param config_list: [CONFIG_* = n/m/y]
         :return: Throws exception if the config_list input is invaid.
         '''
 
-        if config != "" :
-            if os.path.exists(config):
-                self.config_faile = config
-            else:
-                logger.error("config file does not exist")
-                raise AttributeError
+        if not os.path.exists(os.path.join(self.build_params['out'],'.config')):
+            logger.error("config file %s does not exist, please set proper build env", os.path.join(self.build_params['out'],'.config'))
+            raise AttributeError
 
         if len(update_config_list) > 0:
             for config in update_config_list:
@@ -155,6 +182,7 @@ class BuildKernel(object):
                 if len(config_option) != 2:
                     logger.error("config option format error")
                     raise AttributeError
+                logger.debug(config_option)
                 # config option  check
                 if not config_option[0].startswith("CONFIG_"):
                     logger.error("config option should start with CONFIG_")
@@ -166,11 +194,29 @@ class BuildKernel(object):
 
                 logger.debug("updating " + config)
 
+    def __format_command__(self, args=[]):
+        cmd = ["make"]
+        cmd.append("ARCH="+ self.build_params['arch'])
+        cmd.append("O=" + self.build_params['out'])
+        cmd.append("-C")
+        cmd.append(self.kernel_dir)
+        cmd += args
+
+        return cmd
+
     def make_menuconfig(self):
-        logger.info("Run menuconfig")
+        if not os.path.exists(self.build_params['out']):
+            os.mkdir(self.build_params['out'])
+
+        exec_command(self.__format_command__(['menuconfig']))
+
 
     def make_kernel(self):
-        logger.info("Build kernel")
+        if not os.path.exists(self.build_params['out']):
+            os.mkdir(self.build_params['out'])
+
+        exec_command(self.__format_command__(['oldconfig']))
+        exec_command(self.__format_command__())
 
     def __str_build_params__(self):
         build_str = "Build Params :\n" + \
@@ -178,22 +224,45 @@ class BuildKernel(object):
         "Rootfs : " + self.build_params['rootfs'] + "\n" + \
         "Out : " + self.build_params['out'] + "\n" + \
         "Threads : " + str(self.build_params['threads']) + "\n" + \
-        "Use EFI header : " + str(self.use_efi_header) + "\n"
+        "Use EFI header : " + str(self.use_efi_header) + "\n" + \
+        "Config FILE : " + self.config + "\n"
 
         return build_str
 
     def __str__(self):
-        out_str = "Version : " + self.uname + "\n" +\
+        out_str = "Kernel Dir : " + self.kernel_dir + "\n" +\
+                  "Version : " + self.uname + "\n" +\
                   self.__str_build_params__()
 
         return out_str
+
+def is_valid_directory(parser, arg):
+    if not os.path.isdir(arg):
+        parser.error('The directory {} does not exist!'.format(arg))
+    else:
+        # File exists so return the directory
+        return arg
 
 if __name__ == '__main__':
 
     print "test func"
     #build_main()
-    kobj = BuildKernel(os.getcwd())
-    kobj.set_build_env(arch="arm8", use_efi_header=True, rootfs=os.getcwd())
-    kobj.update_config_options(config=os.path.join(os.getcwd(), "x86_64_defconfig"))
-    kobj.make_menuconfig()
+    parser = argparse.ArgumentParser(description='Build kernel python application')
+    parser.add_argument('kernel_src', action="store", type=lambda x: is_valid_directory(parser, x), help='kernel source directory path')
+    parser.add_argument('-c', '--config', action='store', dest='config', type=argparse.FileType(), help='config file used for kernel compliation')
+    parser.add_argument('-a', '--arch', action='store', dest='arch', type=str, help='kernel architecture')
+    parser.add_argument('-r', '--rootfs', action='store', dest='rootfs', type=lambda x: is_valid_directory(parser, x), help='if using initramfs, specify path to rootfs')
+    parser.add_argument('-o', '--out', action='store', dest='out', type=lambda x: is_valid_directory(parser, x), help='path to kernel out directory')
+    parser.add_argument('-j', '--threads', action='store', dest='threads', type=int, default=multiprocessing.cpu_count(), help='no of threds for compilation')
+    parser.add_argument('--efi-header', action='store_true', default=False, dest='use_efi_header', help='use efi header')
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s 1.0')
+    args = parser.parse_args()
+
+    print args
+
+    kobj = BuildKernel(args.kernel_src)
+    #kobj.set_build_env(arch=args.arch, config=args.config, use_efi_header=args.use_efi_header,
+    #                   rootfs=args.rootfs, out=args.out, threads=args.threads)
+    #kobj.update_config_options(update_config_list=["CONFIG_EFI_STUB=y"])
+    #kobj.make_menuconfig()
     kobj.make_kernel()

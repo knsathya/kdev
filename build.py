@@ -64,11 +64,11 @@ class BoardConfigParser(object):
     min_cfg_sections = ['BUILD_OPTIONS']
     #Minimum config file optioons
     min_cfg_options = ['arch', 'soc_name', 'board_name', 'version']
-    #Build section name
-    build_section_name = "BUILD_OPTIONS"
 
     def __init__(self, cfg):
         self.cfg_file = cfg
+        # Build section name
+        build_section_name = "BUILD_OPTIONS"
         try:
             self.parser = ConfigParser.ConfigParser()
             self.parser.read(self.cfg_file)
@@ -80,15 +80,15 @@ class BoardConfigParser(object):
         assert set(BoardConfigParser.min_cfg_sections).issubset(set(sections)), \
             self.cfg_file + " : Missing section error"
 
-        build_options = self.parser.options(BoardConfigParser.build_section_name)
+        build_options = self.parser.options(build_section_name)
 
         assert set(BoardConfigParser.min_cfg_options).issubset(set(build_options)), \
             self.cfg_file + " : Missing option error"
 
-        self.arch_name = self.parser.get(BoardConfigParser.build_section_name, "arch")
-        self.soc_name = self.parser.get(BoardConfigParser.build_section_name, "soc_name")
-        self.board_name = self.parser.get(BoardConfigParser.build_section_name, "board_name")
-        self.version_name = self.parser.get(BoardConfigParser.build_section_name, "version")
+        self.arch_name = self.parser.get(build_section_name, "arch")
+        self.soc_name = self.parser.get(build_section_name, "soc_name")
+        self.board_name = self.parser.get(build_section_name, "board_name")
+        self.version_name = self.parser.get(build_section_name, "version")
 
     def __str__(self):
         return "Arch = " + self.arch_name + "\n" + "SOC  = " + self.soc_name + "\n" +\
@@ -96,18 +96,19 @@ class BoardConfigParser(object):
 
 
 class BuildRecipe(object):
-    board_conf_file_pattern = "board.cfg"
-    kernel_cmdline_file_pattern = "cmdline"
-    kernel_config_file_pattern = "kernel.config"
 
     def __init__(self, root):
+
+        board_cfg = "board.cfg"
+        kernel_cmdline = "cmdline"
+        kernel_config = "kernel.config"
 
         if not os.path.isdir(root):
             raise AttributeError
 
-        board_conf_file = os.path.join(root, BuildRecipe.board_conf_file_pattern)
+        board_conf_file = os.path.join(root, board_cfg)
         if not os.path.isfile(board_conf_file):
-            logger.warn("%s: kernel config file missing", root)
+            logger.warn("%s: board config file missing", board_conf_file)
             raise IOError
 
         try:
@@ -117,16 +118,16 @@ class BuildRecipe(object):
             logger.warn("%s: config file parse error", board_conf_file)
             raise AssertionError
 
-        kernel_config_file = os.path.join(root, BuildRecipe.kernel_config_file_pattern)
-        if not os.path.isfile(kernel_config_file):
-            logger.warn("%s: kernel config file missing", root)
+        kernel_config_file = os.path.join(root, kernel_config)
+        if not os.path.isfile(kernel_config):
+            logger.warn("%s: kernel config file missing", kernel_config)
             raise IOError
 
         self.kernel_config = kernel_config_file
 
-        kernel_cmdline_file = os.path.join(root, BuildRecipe.kernel_cmdline_file_pattern)
+        kernel_cmdline_file = os.path.join(root, kernel_cmdline)
         if not os.path.isfile(kernel_cmdline_file):
-            logger.warn("%s: kernel cmdline file missing", root)
+            logger.warn("%s: kernel cmdline file missing", kernel_cmdline_file)
 
         self.kernel_cmdline = kernel_cmdline_file
 
@@ -144,7 +145,7 @@ def build_main():
 
     # get the list of valid recipes
     target_dirs = map(lambda x: os.path.dirname(os.path.realpath(x)),
-                      glob_recursive(_TARGET_RECIPES_DIR, BuildRecipe.board_conf_file_pattern))
+                      glob_recursive(_TARGET_RECIPES_DIR, "board.cfg"))
 
     for target_dir in target_dirs:
         try:
@@ -179,4 +180,4 @@ def build_main():
 if __name__ == '__main__':
 
     print "test func"
-    #build_main()
+    build_main()
