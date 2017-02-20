@@ -39,6 +39,7 @@ import logging
 import ConfigParser
 import multiprocessing
 from pyparsing import *
+from BuildKernel import BuildKernel
 
 _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
 _ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "/rootfs"))
@@ -59,40 +60,44 @@ def glob_recursive(root, pattern):
 
     return file_list
 
-class BoardConfigParser(object):
-    #Minimum config file sections
-    min_cfg_sections = ['BUILD_OPTIONS']
-    #Minimum config file optioons
-    min_cfg_options = ['arch', 'soc_name', 'board_name', 'version']
+class BoardConfig(object):
 
     def __init__(self, cfg):
-        self.cfg_file = cfg
-        # Build section name
+
+        # Minimum config file sections
+        min_cfg_sections = ['BUILD_OPTIONS']
+
+        # build config sections and options
         build_section_name = "BUILD_OPTIONS"
+        build_cfg_options = ['arch', 'soc', 'board', 'version']
+
+        self.cfg_file = cfg
+
         try:
             self.parser = ConfigParser.ConfigParser()
             self.parser.read(self.cfg_file)
         except ConfigParser.ParsingError, err:
-            print 'cfg parse error:', err
+            raise Exception("Config parse error")
 
         sections = self.parser.sections()
+        if not set(min_cfg_sections).issubset(set(sections)):
+            raise Exception("Missing config sections error")
 
-        assert set(BoardConfigParser.min_cfg_sections).issubset(set(sections)), \
-            self.cfg_file + " : Missing section error"
-
+        #build section checks
         build_options = self.parser.options(build_section_name)
+        if not set(build_cfg_options).issubset(set(build_options)):
+            raise Exception("Missing config options error")
 
-        assert set(BoardConfigParser.min_cfg_options).issubset(set(build_options)), \
-            self.cfg_file + " : Missing option error"
+        get_build_option = lambda x : self.parser.get(build_section_name, x)
 
-        self.arch_name = self.parser.get(build_section_name, "arch")
-        self.soc_name = self.parser.get(build_section_name, "soc_name")
-        self.board_name = self.parser.get(build_section_name, "board_name")
-        self.version_name = self.parser.get(build_section_name, "version")
+        self.arch = get_build_option("arch")
+        self.soc = get_build_option("soc")
+        self.board = get_build_option("board")
+        self.version = get_build_option("version")
 
     def __str__(self):
-        return "Arch = " + self.arch_name + "\n" + "SOC  = " + self.soc_name + "\n" +\
-               "BOARD = " + self.board_name + "\n" + "VERSION = " + self.version_name
+        return "Arch = " + self.arch + "\n" + "SOC  = " + self.soc + "\n" +\
+               "BOARD = " + self.board + "\n" + "VERSION = " + self.version
 
 
 class BuildRecipe(object):
@@ -104,6 +109,7 @@ class BuildRecipe(object):
         kernel_config = "kernel.config"
 
         if not os.path.isdir(root):
+            logger.warn("%s: invalid build recipe root", root)
             raise AttributeError
 
         board_conf_file = os.path.join(root, board_cfg)
@@ -111,16 +117,11 @@ class BuildRecipe(object):
             logger.warn("%s: board config file missing", board_conf_file)
             raise IOError
 
-        try:
-            self.bconf_parser = BoardConfigParser(board_conf_file)
-            self.board_config = board_conf_file
-        except AssertionError:
-            logger.warn("%s: config file parse error", board_conf_file)
-            raise AssertionError
+        self.board_config = BoardConfig(board_conf_file)
 
         kernel_config_file = os.path.join(root, kernel_config)
-        if not os.path.isfile(kernel_config):
-            logger.warn("%s: kernel config file missing", kernel_config)
+        if not os.path.isfile(kernel_config_file):
+            logger.warn("%s: kernel config file missing", kernel_config_file)
             raise IOError
 
         self.kernel_config = kernel_config_file
@@ -128,15 +129,13 @@ class BuildRecipe(object):
         kernel_cmdline_file = os.path.join(root, kernel_cmdline)
         if not os.path.isfile(kernel_cmdline_file):
             logger.warn("%s: kernel cmdline file missing", kernel_cmdline_file)
+            raise IOError
 
         self.kernel_cmdline = kernel_cmdline_file
 
-    def build_name(self):
-        return self.bconf_parser.soc_name + "_" + self.bconf_parser.board_name +\
-               "_" + self.bconf_parser.version_name
-
     def __str__(self):
-        return self.build_name()
+        return self.board_config.soc + "_" + self.board_config.board +\
+               "_" + self.board_config.version
 
 def build_main():
     valid_recipes = []
@@ -151,12 +150,16 @@ def build_main():
         try:
             recipe = BuildRecipe(target_dir)
         except Exception as e:
+            logger.warn(e)
             logger.warn("Invalid Recipe in %s", target_dir)
             recipe = None
 
         if recipe is not None:
             logger.debug("valid recipe %s", recipe)
             valid_recipes.append(recipe)
+
+    if len(valid_recipes) <= 0:
+        raise Exception("No valid targets found")
 
     user_input = -1
 
@@ -176,6 +179,24 @@ def build_main():
     selected_target = valid_recipes[user_input]
 
     logger.debug("Building target image for %s", selected_target)
+
+    logger.info("Board Config file %s", selected_target.board_config)
+    logger.info("Kernel Config file %s", selected_target.kernel_config)
+    logger.info("Kernel Cmdline file %s", selected_target.kernel_cmdline)
+    logger.info("Kernel Source %s", _KERNEL_DIR)
+    logger.info("Rootfs Source %s", _ROOTFS_DIR)
+    logger.info("Out dir %s", _OUT_DIR)
+    logger.info("Kernel Out dir %s", _KERNEL_OUT_DIR)
+    logger.info("Build Params:")
+    logger.info("ARCH = %s", selected_target.board_config.arch)
+    logger.info("SOC = %s", selected_target.board_config.soc)
+
+    kobj = BuildKernel(_KERNEL_DIR)
+
+    kobj.set_build_env(arch=selected_target.board_config.arch,
+                       config=selected_target.kernel_config,
+                       use_efi_header=True, rootfs=_ROOTFS_DIR,
+                       out=_OUT_DIR, threads=multiprocessing.cpu_count())
 
 if __name__ == '__main__':
 

@@ -204,19 +204,25 @@ class BuildKernel(object):
 
         return cmd
 
-    def make_menuconfig(self):
+    def make_menuconfig(self, flags=[]):
         if not os.path.exists(self.build_params['out']):
             os.mkdir(self.build_params['out'])
 
-        exec_command(self.__format_command__(['menuconfig']))
+        if type(flags) is not list:
+                raise Exception("Invalid make flags")
+
+        exec_command(self.__format_command__(flags + ['menuconfig']))
 
 
-    def make_kernel(self):
+    def make_kernel(self, flags=[]):
         if not os.path.exists(self.build_params['out']):
             os.mkdir(self.build_params['out'])
 
-        exec_command(self.__format_command__(['oldconfig']))
-        exec_command(self.__format_command__())
+        if type(flags) is not list:
+                raise Exception("Invalid make flags")
+
+        exec_command(self.__format_command__(flags + ['oldconfig']))
+        exec_command(self.__format_command__(flags))
 
     def __str_build_params__(self):
         build_str = "Build Params :\n" + \
@@ -254,15 +260,15 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--rootfs', action='store', dest='rootfs', type=lambda x: is_valid_directory(parser, x), help='if using initramfs, specify path to rootfs')
     parser.add_argument('-o', '--out', action='store', dest='out', type=lambda x: is_valid_directory(parser, x), help='path to kernel out directory')
     parser.add_argument('-j', '--threads', action='store', dest='threads', type=int, default=multiprocessing.cpu_count(), help='no of threds for compilation')
-    parser.add_argument('--efi-header', action='store_true', default=False, dest='use_efi_header', help='use efi header')
+    parser.add_argument('--use-efi-header', action='store_true', default=False, dest='use_efi_header', help='use efi header')
     parser.add_argument('-v', '--version', action='version', version='%(prog)s 1.0')
     args = parser.parse_args()
 
     print args
 
     kobj = BuildKernel(args.kernel_src)
-    #kobj.set_build_env(arch=args.arch, config=args.config, use_efi_header=args.use_efi_header,
-    #                   rootfs=args.rootfs, out=args.out, threads=args.threads)
+    kobj.set_build_env(arch=args.arch, config=args.config, use_efi_header=args.use_efi_header,
+                       rootfs=args.rootfs, out=args.out, threads=args.threads)
     #kobj.update_config_options(update_config_list=["CONFIG_EFI_STUB=y"])
-    #kobj.make_menuconfig()
+    kobj.make_menuconfig()
     kobj.make_kernel()
