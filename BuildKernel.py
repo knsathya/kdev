@@ -49,7 +49,7 @@ logger.setLevel(logging.DEBUG)
 
 def exec_command(cmd):
     logger.info("executing %s", ' '.join(cmd))
-    p = subprocess.call(cmd)
+    p = subprocess.check_call(cmd)
 
 class BuildKernel(object):
 
@@ -69,10 +69,10 @@ class BuildKernel(object):
             raise IOError
 
         key_value_format = lambda x, y: Combine(LineStart() + Literal(x) + restOfLine(y))
-        version_format = key_value_format("VERSION = ", 'version')
-        patchlevel_format = key_value_format("PATCHLEVEL = ", 'patchlevel')
-        sublevel_format = key_value_format("SUBLEVEL = ", 'sublevel')
-        extraversion_format = key_value_format("EXTRAVERSION = ", 'extraversion')
+        version_format = key_value_format("VERSION =", 'version')
+        patchlevel_format = key_value_format("PATCHLEVEL =", 'patchlevel')
+        sublevel_format = key_value_format("SUBLEVEL =", 'sublevel')
+        extraversion_format = key_value_format("EXTRAVERSION =", 'extraversion')
         name_format = key_value_format("NAME = ", 'name')
 
         # Extract version and name info
@@ -82,6 +82,11 @@ class BuildKernel(object):
             self.sublevel = sublevel_format.scanString(makefile_contents).next()[0].sublevel
             self.extraversion = extraversion_format.scanString(makefile_contents).next()[0].extraversion
             self.name = name_format.scanString(makefile_contents).next()[0].name
+            logger.debug("version : %s", self.version)
+            logger.debug("patchlevel : %s", self.patchelevel)
+            logger.debug("sublevel : %s", self.sublevel)
+            logger.debug("extraversion : %s", self.extraversion)
+            logger.debug("name : %s", self.name)
         except StopIteration:
             logger.error("Stop iteration exception")
             logger.debug("version : %s", self.version)
@@ -267,7 +272,7 @@ if __name__ == '__main__':
     print args
 
     kobj = BuildKernel(args.kernel_src)
-    kobj.set_build_env(arch=args.arch, config=args.config, use_efi_header=args.use_efi_header,
+    kobj.set_build_env(arch=args.arch, config=args.config.name, use_efi_header=args.use_efi_header,
                        rootfs=args.rootfs, out=args.out, threads=args.threads)
     #kobj.update_config_options(update_config_list=["CONFIG_EFI_STUB=y"])
     kobj.make_menuconfig()
