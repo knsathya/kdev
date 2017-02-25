@@ -109,8 +109,7 @@ class BuildKernel(object):
         self.build_params['out'] = os.path.join(os.getcwd(), "out")
 
         # Initalize config params
-        def_config_path = "arch/x86/configs/x86_64_defconfig"
-        self.config = os.path.join(self.kernel_dir, def_config_path)
+        self.config = None
         self.update_config_list = {}
 
         # Initalize efi/initramfs build flags
@@ -156,7 +155,8 @@ class BuildKernel(object):
         if not os.path.exists(self.build_params['out']):
             os.mkdir(self.build_params['out'])
 
-        copyfile(self.config, os.path.join(self.build_params['out'],'.config'))
+        if self.config is not None:
+            copyfile(self.config, os.path.join(self.build_params['out'],'.config'))
 
         if use_efi_header is not None:
             self.use_efi_header = use_efi_header
@@ -199,6 +199,7 @@ class BuildKernel(object):
 
                 logger.debug("updating " + config)
 
+
     def __format_command__(self, args=[]):
         cmd = ["make"]
         cmd.append("ARCH="+ self.build_params['arch'])
@@ -226,7 +227,11 @@ class BuildKernel(object):
         if type(flags) is not list:
                 raise Exception("Invalid make flags")
 
-        exec_command(self.__format_command__(flags + ['oldconfig']))
+        if self.config is not None:
+            exec_command(self.__format_command__(flags + ['oldconfig']))
+        else:
+            exec_command(self.__format_command__(flags + ['defconfig']))
+
         exec_command(self.__format_command__(flags))
 
     def __str_build_params__(self):
@@ -275,5 +280,5 @@ if __name__ == '__main__':
     kobj.set_build_env(arch=args.arch, config=args.config.name, use_efi_header=args.use_efi_header,
                        rootfs=args.rootfs, out=args.out, threads=args.threads)
     #kobj.update_config_options(update_config_list=["CONFIG_EFI_STUB=y"])
-    kobj.make_menuconfig()
+    #kobj.make_menuconfig()
     kobj.make_kernel()
