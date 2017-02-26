@@ -41,15 +41,46 @@ import multiprocessing
 from pyparsing import *
 import argparse
 import subprocess
-from shutil import copyfile
+import tempfile
+from shutil import copyfile, move
+from threading  import Thread
 
-logging.basicConfig(level=logging.DEBUG)
+
 logger = logging.getLogger(__name__)
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(format=FORMAT)
 logger.setLevel(logging.DEBUG)
 
-def exec_command(cmd):
+def tee(infile, *files):
+    """Print `infile` to `files` in a separate thread."""
+    def fanout(infile, *files):
+        for line in iter(infile.readline, ''):
+            for f in files:
+                f.write(line)
+        infile.close()
+    t = Thread(target=fanout, args=(infile,)+files)
+    t.daemon = True
+    t.start()
+    return t
+
+def teed_call(cmd_args, **kwargs):
+    stdout, stderr = [kwargs.pop(s, None) for s in 'stdout', 'stderr']
+    p = subprocess.Popen(cmd_args,
+              stdout=subprocess.PIPE if stdout is not None else None,
+              stderr=subprocess.PIPE if stderr is not None else None,
+              **kwargs)
+    threads = []
+    if stdout is not None: threads.append(tee(p.stdout, stdout, sys.stdout))
+    if stderr is not None: threads.append(tee(p.stderr, stderr, sys.stderr))
+    for t in threads: t.join() # wait for IO completion
+    return p.wait()
+
+def exec_command(cmd, tee_log=False, out_log=sys.stdout, err_log=sys.stderr):
     logger.info("executing %s", ' '.join(cmd))
-    p = subprocess.check_call(cmd)
+    if tee_log is False:
+        return subprocess.check_call(cmd)
+    else:
+        return teed_call(cmd, stdout=out_log, stderr=err_log, bufsize=0)
 
 class BuildKernel(object):
 
@@ -77,11 +108,11 @@ class BuildKernel(object):
 
         # Extract version and name info
         try:
-            self.version = version_format.scanString(makefile_contents).next()[0].version
-            self.patchelevel = patchlevel_format.scanString(makefile_contents).next()[0].patchlevel
-            self.sublevel = sublevel_format.scanString(makefile_contents).next()[0].sublevel
-            self.extraversion = extraversion_format.scanString(makefile_contents).next()[0].extraversion
-            self.name = name_format.scanString(makefile_contents).next()[0].name
+            self.version = version_format.scanString(makefile_contents).next()[0].version.strip()
+            self.patchelevel = patchlevel_format.scanString(makefile_contents).next()[0].patchlevel.strip()
+            self.sublevel = sublevel_format.scanString(makefile_contents).next()[0].sublevel.strip()
+            self.extraversion = extraversion_format.scanString(makefile_contents).next()[0].extraversion.strip()
+            self.name = name_format.scanString(makefile_contents).next()[0].name.strip()
             logger.debug("version : %s", self.version)
             logger.debug("patchlevel : %s", self.patchelevel)
             logger.debug("sublevel : %s", self.sublevel)
@@ -116,6 +147,14 @@ class BuildKernel(object):
         self.use_efi_header = False
         self.use_init_ramfs = False
 
+        self.log_dir = os.path.join(os.getcwd(), ".log", self.full_version)
+
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+
+        self.out_log = open(os.path.join(self.log_dir, 'out.log'), 'w')
+        self.err_log = open(os.path.join(self.log_dir, 'err.log'), 'w')
+
     def set_build_env(self, arch="x86_64", config=None, use_efi_header=False, rootfs=None, out=None, threads=multiprocessing.cpu_count()):
         '''
         Set the build parameters for compilation.
@@ -147,7 +186,7 @@ class BuildKernel(object):
         if config is not None:
             logger.debug("updating config")
             if os.path.exists(config):
-                self.config = config
+                copyfile(config, os.path.join(self.build_params['out'], '.config'))
             else:
                 logger.error("config file does not exist")
                 raise AttributeError
@@ -155,8 +194,8 @@ class BuildKernel(object):
         if not os.path.exists(self.build_params['out']):
             os.mkdir(self.build_params['out'])
 
-        if self.config is not None:
-            copyfile(self.config, os.path.join(self.build_params['out'],'.config'))
+        if os.path.exists(os.path.join(self.build_params['out'],'.config')):
+            self.config = os.path.join(self.build_params['out'],'.config')
 
         if use_efi_header is not None:
             self.use_efi_header = use_efi_header
@@ -175,7 +214,7 @@ class BuildKernel(object):
         :param config_list: [CONFIG_* = n/m/y]
         :return: Throws exception if the config_list input is invaid.
         '''
-
+        config_temp = tempfile.NamedTemporaryFile(suffix='.config', prefix='kernel_', dir=self.log_dir,)
         if not os.path.exists(os.path.join(self.build_params['out'],'.config')):
             logger.error("config file %s does not exist, please set proper build env", os.path.join(self.build_params['out'],'.config'))
             raise AttributeError
@@ -199,10 +238,37 @@ class BuildKernel(object):
 
                 logger.debug("updating " + config)
 
+                logger.info(config_temp.name)
+
+                config_temp.write(config + "\n")
+
+        config_temp.seek(0)
+        merge_command = [os.path.join(self.kernel_dir, "scripts/kconfig/merge_config.sh")]
+        merge_command.append("-m")
+        merge_command.append("-O")
+        merge_command.append(self.log_dir)
+        merge_command.append(self.config)
+        merge_command.append(config_temp.name)
+        exec_command(merge_command)
+        move(os.path.join(self.log_dir, ".config"),  os.path.join(self.build_params['out'],'.config'))
+        self.config =  os.path.join(self.build_params['out'],'.config')
+        config_temp.close()
+
+    def __exec_cmd__(self, cmd, log=False):
+
+        if log is True:
+            self.out_log.seek(0)
+            self.out_log.truncate()
+            self.err_log.seek(0)
+            self.err_log.truncate()
+            exec_command(cmd, tee_log=True, out_log=self.out_log, err_log=self.err_log)
+        else:
+            exec_command(cmd)
 
     def __format_command__(self, args=[]):
         cmd = ["make"]
         cmd.append("ARCH="+ self.build_params['arch'])
+        cmd.append("-j" + str(self.build_params['threads']))
         cmd.append("O=" + self.build_params['out'])
         cmd.append("-C")
         cmd.append(self.kernel_dir)
@@ -210,17 +276,16 @@ class BuildKernel(object):
 
         return cmd
 
-    def make_menuconfig(self, flags=[]):
+    def make_menuconfig(self, flags=[], log=False):
         if not os.path.exists(self.build_params['out']):
             os.mkdir(self.build_params['out'])
 
         if type(flags) is not list:
                 raise Exception("Invalid make flags")
 
-        exec_command(self.__format_command__(flags + ['menuconfig']))
+        self.__exec_cmd__(self.__format_command__(flags + ['menuconfig']), log)
 
-
-    def make_kernel(self, flags=[]):
+    def make_kernel(self, flags=[], log=False):
         if not os.path.exists(self.build_params['out']):
             os.mkdir(self.build_params['out'])
 
@@ -228,11 +293,11 @@ class BuildKernel(object):
                 raise Exception("Invalid make flags")
 
         if self.config is not None:
-            exec_command(self.__format_command__(flags + ['oldconfig']))
+            self.__exec_cmd__(self.__format_command__(flags + ['oldconfig']), log)
         else:
-            exec_command(self.__format_command__(flags + ['defconfig']))
+            self.__exec_cmd__(self.__format_command__(flags + ['defconfig']), log)
 
-        exec_command(self.__format_command__(flags))
+        self.__exec_cmd__(self.__format_command__(flags), log)
 
     def __str_build_params__(self):
         build_str = "Build Params :\n" + \
@@ -241,7 +306,7 @@ class BuildKernel(object):
         "Out : " + self.build_params['out'] + "\n" + \
         "Threads : " + str(self.build_params['threads']) + "\n" + \
         "Use EFI header : " + str(self.use_efi_header) + "\n" + \
-        "Config FILE : " + self.config + "\n"
+        "Config FILE : " + self.config if self.config else "None" + "\n"
 
         return build_str
 
@@ -271,14 +336,16 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--out', action='store', dest='out', type=lambda x: is_valid_directory(parser, x), help='path to kernel out directory')
     parser.add_argument('-j', '--threads', action='store', dest='threads', type=int, default=multiprocessing.cpu_count(), help='no of threds for compilation')
     parser.add_argument('--use-efi-header', action='store_true', default=False, dest='use_efi_header', help='use efi header')
+    parser.add_argument('--log', action='store_true', default=False, dest='use_log',
+                        help='logs to file')
     parser.add_argument('-v', '--version', action='version', version='%(prog)s 1.0')
     args = parser.parse_args()
 
     print args
 
     kobj = BuildKernel(args.kernel_src)
-    kobj.set_build_env(arch=args.arch, config=args.config.name, use_efi_header=args.use_efi_header,
+    kobj.set_build_env(arch=args.arch, config=args.config.name if args.config else None, use_efi_header=args.use_efi_header,
                        rootfs=args.rootfs, out=args.out, threads=args.threads)
-    #kobj.update_config_options(update_config_list=["CONFIG_EFI_STUB=y"])
-    #kobj.make_menuconfig()
-    kobj.make_kernel()
+    kobj.update_config_options(update_config_list=["CONFIG_EFI_STUB=y"])
+    #kobj.make_menuconfig(log=args.use_log)
+    kobj.make_kernel(log=args.use_log)
