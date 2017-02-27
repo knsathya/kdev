@@ -40,6 +40,7 @@ import ConfigParser
 import multiprocessing
 from pyparsing import *
 from BuildKernel import BuildKernel
+import argparse
 
 _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
 _ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "/rootfs"))
@@ -48,8 +49,9 @@ _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
 _KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", os.path.join(os.getcwd(), "out/kernel-obj"))
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.getcwd() + "/target-recipes")
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(format=FORMAT)
 logger.setLevel(logging.DEBUG)
 
 def glob_recursive(root, pattern):
@@ -70,6 +72,12 @@ class BoardConfig(object):
         # build config sections and options
         build_section_name = "BUILD_OPTIONS"
         build_cfg_options = ['arch', 'soc', 'board', 'version']
+
+        #KERNEL_BUILD_OPTIONS
+        kernel_build_section_name = "KERNEL_BUILD_OPTIONS"
+
+        #BOOT_IMAGE_OPTIONS
+        boot_image_section_name = "BOOT_IMAGE_OPTIONS"
 
         self.cfg_file = cfg
 
@@ -95,9 +103,35 @@ class BoardConfig(object):
         self.board = get_build_option("board")
         self.version = get_build_option("version")
 
+        get_image_option = lambda x : self.parser.get(boot_image_section_name, x)
+
+        self.use_efi_header = False
+        self.use_init_ramfs = False
+        self.build_header = None
+
+        if self.parser.has_section(boot_image_section_name):
+            if self.parser.has_option(boot_image_section_name, "header"):
+                self.build_header = get_image_option("header")
+                self.use_efi_header = True if get_image_option("header") == "efi" else False
+
+        if self.parser.has_section(kernel_build_section_name):
+            if self.parser.has_option(kernel_build_section_name, "use_init_ramfs"):
+                self.use_init_ramfs = self.parser.getboolean(kernel_build_section_name, "use_init_ramfs")
+
     def __str__(self):
-        return "Arch = " + self.arch + "\n" + "SOC  = " + self.soc + "\n" +\
-               "BOARD = " + self.board + "\n" + "VERSION = " + self.version
+        out_str= ""
+
+        out_str_append = lambda x,y : out_str + x + " = " + y +"\n"
+
+        out_str = out_str_append("ARCH", self.arch)
+        out_str = out_str_append("SOC", self.soc)
+        out_str = out_str_append("BOARD", self.board)
+        out_str = out_str_append("VERSION", self.version)
+        out_str = out_str_append("HEADER", self.build_header if self.build_header is not None else "None")
+        out_str = out_str_append("USE-INITRAMFS", str(self.use_init_ramfs))
+        out_str = out_str_append("USE-EFI-HEADER", str(self.use_efi_header))
+
+        return out_str
 
 
 class BuildRecipe(object):
@@ -107,6 +141,7 @@ class BuildRecipe(object):
         board_cfg = "board.cfg"
         kernel_cmdline = "cmdline"
         kernel_config = "kernel.config"
+        kernel_diff_config = "kernel_diff.config"
 
         if not os.path.isdir(root):
             logger.warn("%s: invalid build recipe root", root)
@@ -133,9 +168,35 @@ class BuildRecipe(object):
 
         self.kernel_cmdline = kernel_cmdline_file
 
+        kernel_diff_config_file = os.path.join(root, kernel_diff_config)
+        if not os.path.isfile(kernel_cmdline_file):
+            logger.warn("%s: kernel diff config file missing", kernel_diff_config_file)
+            self.kernel_diff_config = None
+        else:
+            self.kernel_diff_config = kernel_diff_config_file
+
+    def target_name(self):
+        out_str = self.board_config.soc
+        if not self.board_config.board == "":
+            out_str += "_" + self.board_config.board
+        if not self.board_config.version == "":
+            out_str += "_" + self.board_config.version
+
+        return out_str
+
     def __str__(self):
-        return self.board_config.soc + "_" + self.board_config.board +\
-               "_" + self.board_config.version
+        out_str= ""
+
+        out_str_append = lambda x,y : out_str + x + " = " + y +"\n"
+
+        out_str = out_str_append("BOARD_CONFIG", self.board_config.cfg_file)
+        out_str = out_str_append("KERNEL_CONFIG", self.kernel_config)
+        out_str = out_str_append("KERNEL_CMDLINE", self.kernel_cmdline)
+        out_str = out_str_append("KERNEL_DIFFCONFIG",
+                                 self.kernel_diff_config if self.kernel_diff_config is not None else "None")
+
+
+        return out_str
 
 def build_main():
     valid_recipes = []
@@ -168,7 +229,7 @@ def build_main():
         index = 0
         for recipe in valid_recipes:
             index = index + 1
-            print str(index) + " : " + str(recipe)
+            print str(index) + " : " + recipe.target_name()
 
         user_input = raw_input("Please select build target: \n")
         if user_input.isdigit():
@@ -178,18 +239,15 @@ def build_main():
 
     selected_target = valid_recipes[user_input]
 
-    logger.debug("Building target image for %s", selected_target)
-
-    logger.info("Board Config file %s", selected_target.board_config)
-    logger.info("Kernel Config file %s", selected_target.kernel_config)
-    logger.info("Kernel Cmdline file %s", selected_target.kernel_cmdline)
+    logger.debug("Building target image for %s", selected_target.target_name())
     logger.info("Kernel Source %s", _KERNEL_DIR)
     logger.info("Rootfs Source %s", _ROOTFS_DIR)
     logger.info("Out dir %s", _OUT_DIR)
     logger.info("Kernel Out dir %s", _KERNEL_OUT_DIR)
+    logger.info("RECIPE INFO:")
+    logger.info("%s", selected_target)
     logger.info("Build Params:")
-    logger.info("ARCH = %s", selected_target.board_config.arch)
-    logger.info("SOC = %s", selected_target.board_config.soc)
+    logger.info("%s", selected_target.board_config)
 
     kobj = BuildKernel(_KERNEL_DIR)
 
@@ -198,7 +256,55 @@ def build_main():
                        use_efi_header=True, rootfs=_ROOTFS_DIR,
                        out=_OUT_DIR, threads=multiprocessing.cpu_count())
 
+
+def is_valid_kernel(parser, arg):
+    if not os.path.isdir(arg) or not os.path.exists(os.path.join(arg, 'Makefile')):
+        parser.error('{} is not a valid kernel source!'.format(arg))
+    else:
+        # File exists so return the directory
+        return arg
+
+def is_valid_directory(parser, arg):
+    if not os.path.isdir(arg):
+        parser.error('The directory {} does not exist!'.format(arg))
+    else:
+        # File exists so return the directory
+        return arg
+
+def is_valid_recipe(parser, arg):
+    if not os.path.isdir(arg):
+        parser.error('The directory {} does not exist!'.format(arg))
+
+    try:
+        recipe = BuildRecipe(arg)
+    except Exception as e:
+        parser.error('{} is not a valid recipe directory!'.format(arg))
+
+        return arg
+
+
 if __name__ == '__main__':
 
     print "test func"
+    parser = argparse.ArgumentParser(description='kdev build app')
+
+    parser.add_argument('-k', '--kernel-dir', action='store', dest='kernel-dir',
+                        type=lambda x: is_valid_kernel(parser, x),
+                        help='kernel source directory')
+
+    parser.add_argument('-r', '--rootfs-dir', action='store', dest='rootfs-dir',
+                        type=lambda x: is_valid_directory(parser, x),
+                        help='rootfs directory')
+
+    parser.add_argument('-t', '--target-recipe', action='store', dest='recipe-dir',
+                        type=lambda x: is_valid_recipe(parser, x),
+                        help='target recipe directory')
+
+    parser.add_argument('--log', action='store_true', default=False, dest='use_log',
+                        help='logs to file')
+
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s 1.0')
+
+    args = parser.parse_args()
+
     build_main()
