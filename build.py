@@ -43,11 +43,11 @@ from BuildKernel import BuildKernel
 import argparse
 
 _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
-_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "/rootfs"))
-_KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "/kernel"))
+_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "rootfs"))
+_KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "kernel"))
 _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
-_KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", os.path.join(os.getcwd(), "out/kernel-obj"))
-_TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.getcwd() + "/target-recipes")
+_KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", os.path.join(os.getcwd(), "out","kernel-obj"))
+_TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.getcwd() + "target-recipes")
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
@@ -282,21 +282,53 @@ def is_valid_recipe(parser, arg):
 
         return arg
 
+def check_env(kernel_dir, rootfs_dir):
+
+    print "test"
+
+    global _ROOTFS_DIR, _KERNEL_DIR
+
+    if kernel_dir is not None and os.path.exists(kernel_dir):
+        _KERNEL_DIR = kernel_dir
+
+    if rootfs_dir is not None and os.path.exists(rootfs_dir):
+        _ROOTFS_DIR = rootfs_dir
+
+    #check if kernel_dir is valid
+    if not os.path.exists(os.path.expanduser(_KERNEL_DIR)):
+        logger.error("dir %s does not exist", _KERNEL_DIR)
+        raise IOError
+
+    if not os.path.exists(os.path.join(os.path.expanduser(_KERNEL_DIR), 'Makefile')):
+        logger.error("Invalid kernel %s", _KERNEL_DIR)
+        raise IOError
+
+    #check if rootfs is valid
+    if not os.path.exists(os.path.expanduser(_ROOTFS_DIR)):
+        logger.error("dir %s does not exist", _ROOTFS_DIR)
+        raise IOError
+
+
+
 
 if __name__ == '__main__':
 
     print "test func"
     parser = argparse.ArgumentParser(description='kdev build app')
 
-    parser.add_argument('-k', '--kernel-dir', action='store', dest='kernel-dir',
+    parser.add_argument('-k', '--kernel-dir', action='store', dest='kernel_dir',
                         type=lambda x: is_valid_kernel(parser, x),
                         help='kernel source directory')
 
-    parser.add_argument('-r', '--rootfs-dir', action='store', dest='rootfs-dir',
+    parser.add_argument('-r', '--rootfs-dir', action='store', dest='rootfs_dir',
                         type=lambda x: is_valid_directory(parser, x),
                         help='rootfs directory')
 
-    parser.add_argument('-t', '--target-recipe', action='store', dest='recipe-dir',
+    parser.add_argument('-o', '--out-dir', action='store', dest='out_dir',
+                        type=lambda x: is_valid_directory(parser, x),
+                        help='out directory')
+
+    parser.add_argument('-t', '--target-recipe', action='store', dest='recipe_dir',
                         type=lambda x: is_valid_recipe(parser, x),
                         help='target recipe directory')
 
@@ -307,4 +339,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    build_main()
+    print args
+
+    check_env(args.kernel_dir, args.rootfs_dir)
+
+    #build_main()
