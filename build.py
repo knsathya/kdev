@@ -41,13 +41,15 @@ import multiprocessing
 from pyparsing import *
 from BuildKernel import BuildKernel
 import argparse
+import tempfile
+from shutil import copyfile, move
 
 _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
-_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "rootfs"))
+_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "rootfs", "rootfs"))
 _KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "kernel"))
 _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
 _KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", os.path.join(os.getcwd(), "out","kernel-obj"))
-_TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.getcwd() + "target-recipes")
+_TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.path.join(os.getcwd(), "target-recipes"))
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
@@ -195,8 +197,37 @@ class BuildRecipe(object):
         out_str = out_str_append("KERNEL_DIFFCONFIG",
                                  self.kernel_diff_config if self.kernel_diff_config is not None else "None")
 
-
         return out_str
+
+def build_rootfs():
+    logger.info("Building rootfs")
+    rootfs_image = os.path.join(_OUT_DIR, "rootfs.img")
+    rootfs_ext2_image = os.path.join(_OUT_DIR, "rootfs.img.ext2")
+    cwd = os.getcwd()
+    os.chdir(_ROOTFS_DIR)
+    os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
+    os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
+    os.system("mkfs.ext2 -F %s" % (rootfs_ext2_image))
+    os.system("mkfs.ext2 -F %s" % (rootfs_ext2_image))
+    os.chdir(cwd)
+    temp_dir = tempfile.mkdtemp()
+    os.system("sudo mount -o loop,rw,sync %s %s" % (rootfs_ext2_image, temp_dir))
+    os.chdir(temp_dir)
+    os.system("sudo gzip -cd %s | sudo cpio -imd --quiet" % (rootfs_image))
+    os.chdir(cwd)
+    os.system(("sudo umount %s" % temp_dir))
+    os.removedirs(temp_dir)
+
+def build_kernel(arch, config, use_efi_header, rootfs_dir, kernel_dir, out_dir):
+    logger.info("Building kernel")
+    kobj = BuildKernel(kernel_dir)
+    kobj.set_build_env(arch=arch, config=config, use_efi_header=use_efi_header,
+                       rootfs=rootfs_dir, out=out_dir,
+                       threads=multiprocessing.cpu_count())
+    kobj.make_kernel(log=False)
+
+def generate_image(arch):
+    copyfile(os.path.join(_KERNEL_OUT_DIR, "arch", arch, "boot", "bzImage"), os.path.join(_OUT_DIR, "bzImage.efi"))
 
 def build_main():
     valid_recipes = []
@@ -206,6 +237,8 @@ def build_main():
     # get the list of valid recipes
     target_dirs = map(lambda x: os.path.dirname(os.path.realpath(x)),
                       glob_recursive(_TARGET_RECIPES_DIR, "board.cfg"))
+
+    print target_dirs
 
     for target_dir in target_dirs:
         try:
@@ -249,13 +282,14 @@ def build_main():
     logger.info("Build Params:")
     logger.info("%s", selected_target.board_config)
 
-    kobj = BuildKernel(_KERNEL_DIR)
+    build_kernel(arch=selected_target.board_config.arch,
+                 config=selected_target.kernel_config,
+                 use_efi_header=True, rootfs_dir=_ROOTFS_DIR,
+                 kernel_dir=_KERNEL_DIR, out_dir=_KERNEL_OUT_DIR)
 
-    kobj.set_build_env(arch=selected_target.board_config.arch,
-                       config=selected_target.kernel_config,
-                       use_efi_header=True, rootfs=_ROOTFS_DIR,
-                       out=_OUT_DIR, threads=multiprocessing.cpu_count())
+    build_rootfs()
 
+    generate_image(selected_target.board_config.arch)
 
 def is_valid_kernel(parser, arg):
     if not os.path.isdir(arg) or not os.path.exists(os.path.join(arg, 'Makefile')):
@@ -308,7 +342,12 @@ def check_env(kernel_dir, rootfs_dir):
         logger.error("dir %s does not exist", _ROOTFS_DIR)
         raise IOError
 
-
+    logger.info("Kernel Source %s", _KERNEL_DIR)
+    logger.info("Rootfs Source %s", _ROOTFS_DIR)
+    logger.info("target-recipes %s", _TARGET_RECIPES_DIR)
+    logger.info("Out dir %s", _OUT_DIR)
+    logger.info("Kernel Out dir %s", _KERNEL_OUT_DIR)
+    logger.info("RECIPE INFO:")
 
 
 if __name__ == '__main__':
@@ -343,4 +382,4 @@ if __name__ == '__main__':
 
     check_env(args.kernel_dir, args.rootfs_dir)
 
-    #build_main()
+    build_main()
