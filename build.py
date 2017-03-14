@@ -75,12 +75,6 @@ class BoardConfig(object):
         build_section_name = "BUILD_OPTIONS"
         build_cfg_options = ['arch', 'soc', 'board', 'version']
 
-        #KERNEL_BUILD_OPTIONS
-        kernel_build_section_name = "KERNEL_BUILD_OPTIONS"
-
-        #BOOT_IMAGE_OPTIONS
-        boot_image_section_name = "BOOT_IMAGE_OPTIONS"
-
         self.cfg_file = cfg
 
         try:
@@ -105,21 +99,6 @@ class BoardConfig(object):
         self.board = get_build_option("board")
         self.version = get_build_option("version")
 
-        get_image_option = lambda x : self.parser.get(boot_image_section_name, x)
-
-        self.use_efi_header = False
-        self.use_init_ramfs = False
-        self.build_header = None
-
-        if self.parser.has_section(boot_image_section_name):
-            if self.parser.has_option(boot_image_section_name, "header"):
-                self.build_header = get_image_option("header")
-                self.use_efi_header = True if get_image_option("header") == "efi" else False
-
-        if self.parser.has_section(kernel_build_section_name):
-            if self.parser.has_option(kernel_build_section_name, "use_init_ramfs"):
-                self.use_init_ramfs = self.parser.getboolean(kernel_build_section_name, "use_init_ramfs")
-
     def __str__(self):
         out_str= ""
 
@@ -129,9 +108,6 @@ class BoardConfig(object):
         out_str = out_str_append("SOC", self.soc)
         out_str = out_str_append("BOARD", self.board)
         out_str = out_str_append("VERSION", self.version)
-        out_str = out_str_append("HEADER", self.build_header if self.build_header is not None else "None")
-        out_str = out_str_append("USE-INITRAMFS", str(self.use_init_ramfs))
-        out_str = out_str_append("USE-EFI-HEADER", str(self.use_efi_header))
 
         return out_str
 
@@ -208,7 +184,6 @@ def build_rootfs():
     os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
     os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
     os.system("mkfs.ext2 -F %s" % (rootfs_ext2_image))
-    os.system("mkfs.ext2 -F %s" % (rootfs_ext2_image))
     os.chdir(cwd)
     temp_dir = tempfile.mkdtemp()
     os.system("sudo mount -o loop,rw,sync %s %s" % (rootfs_ext2_image, temp_dir))
@@ -226,10 +201,12 @@ def build_kernel(arch, config, use_efi_header, rootfs_dir, kernel_dir, out_dir):
                        threads=multiprocessing.cpu_count())
     kobj.make_kernel(log=False)
 
-def generate_image(arch):
-    copyfile(os.path.join(_KERNEL_OUT_DIR, "arch", arch, "boot", "bzImage"), os.path.join(_OUT_DIR, "bzImage.efi"))
+def generate_image(arch, build_efi_image=False, build_android_image=False, build_yocto_image=False):
 
-def build_main():
+    if build_efi_image:
+        copyfile(os.path.join(_KERNEL_OUT_DIR, "arch", arch, "boot", "bzImage"), os.path.join(_OUT_DIR, "bzImage.efi"))
+
+def get_build_target():
     valid_recipes = []
     recipe = None
     selected_target = None
@@ -282,14 +259,7 @@ def build_main():
     logger.info("Build Params:")
     logger.info("%s", selected_target.board_config)
 
-    build_kernel(arch=selected_target.board_config.arch,
-                 config=selected_target.kernel_config,
-                 use_efi_header=True, rootfs_dir=_ROOTFS_DIR,
-                 kernel_dir=_KERNEL_DIR, out_dir=_KERNEL_OUT_DIR)
-
-    build_rootfs()
-
-    generate_image(selected_target.board_config.arch)
+    return selected_target
 
 def is_valid_kernel(parser, arg):
     if not os.path.isdir(arg) or not os.path.exists(os.path.join(arg, 'Makefile')):
@@ -367,9 +337,14 @@ if __name__ == '__main__':
                         type=lambda x: is_valid_directory(parser, x),
                         help='out directory')
 
-    parser.add_argument('-t', '--target-recipe', action='store', dest='recipe_dir',
-                        type=lambda x: is_valid_recipe(parser, x),
-                        help='target recipe directory')
+    parser.add_argument('--build-efi', action='store_true', default=False, dest='build_efi_image',
+                        help='Build efi image')
+
+    android_group = parser.add_argument_group('build-android')
+    android_group.add_argument('--build-android', action="store_true", default=False, dest='build_android_image',
+                               help='Build android image')
+    android_group.add_argument('--pk8', metavar='pk8-cert', type=argparse.FileType('rt'), help="pk8 certificate")
+    android_group.add_argument('--x509', metavar='x509-cert', type=argparse.FileType('rt'), help="x509 certificate")
 
     parser.add_argument('--log', action='store_true', default=False, dest='use_log',
                         help='logs to file')
@@ -382,4 +357,13 @@ if __name__ == '__main__':
 
     check_env(args.kernel_dir, args.rootfs_dir)
 
-    build_main()
+    build_target = get_build_target()
+
+    build_kernel(arch=build_target.board_config.arch,
+                 config=build_target.kernel_config,
+                 use_efi_header=True, rootfs_dir=_ROOTFS_DIR,
+                 kernel_dir=_KERNEL_DIR, out_dir=_KERNEL_OUT_DIR)
+
+    build_rootfs()
+
+    generate_image(build_target.board_config.arch, args.build_efi_image)
