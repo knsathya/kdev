@@ -183,7 +183,7 @@ def build_rootfs():
     os.chdir(_ROOTFS_DIR)
     os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
     os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
-    os.system("mkfs.ext2 -F %s" % (rootfs_ext2_image))
+    os.system("mkfs.ext2 -F %s -L rootfs" % (rootfs_ext2_image))
     os.chdir(cwd)
     temp_dir = tempfile.mkdtemp()
     os.system("sudo mount -o loop,rw,sync %s %s" % (rootfs_ext2_image, temp_dir))
