@@ -50,6 +50,7 @@ _KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "kernel"))
 _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
 _KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", os.path.join(os.getcwd(), "out","kernel-obj"))
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.path.join(os.getcwd(), "target-recipes"))
+_SELECTED_TARGET_DIR = os.getenv("SELECTED_TARGET_DIR", None)
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
@@ -249,17 +250,36 @@ def get_build_target():
 
     selected_target = valid_recipes[user_input]
 
-    logger.debug("Building target image for %s", selected_target.target_name())
+    return selected_target
+
+def select_build_target(target_dir=None):
+
+    recipe = None
+
+    if target_dir is not None:
+        try:
+            recipe = BuildRecipe(target_dir)
+        except Exception as e:
+            logger.warn(e)
+            logger.warn("Invalid Recipe in %s", target_dir)
+            recipe = None
+
+    logger.info("Falling back to user selection")
+
+    if recipe is None:
+        recipe = get_build_target()
+
+    logger.debug("Building target image for %s", recipe.target_name())
     logger.info("Kernel Source %s", _KERNEL_DIR)
     logger.info("Rootfs Source %s", _ROOTFS_DIR)
     logger.info("Out dir %s", _OUT_DIR)
     logger.info("Kernel Out dir %s", _KERNEL_OUT_DIR)
     logger.info("RECIPE INFO:")
-    logger.info("%s", selected_target)
+    logger.info("%s", recipe)
     logger.info("Build Params:")
-    logger.info("%s", selected_target.board_config)
+    logger.info("%s", recipe.board_config)
 
-    return selected_target
+    return recipe
 
 def is_valid_kernel(parser, arg):
     if not os.path.isdir(arg) or not os.path.exists(os.path.join(arg, 'Makefile')):
@@ -337,6 +357,10 @@ if __name__ == '__main__':
                         type=lambda x: is_valid_directory(parser, x),
                         help='out directory')
 
+    parser.add_argument('-t', '--target-recipe', action='store', dest='recipe_dir',
+                        type=lambda x: is_valid_directory(parser, x),
+                        help='target recipe directory')
+
     parser.add_argument('--build-efi', action='store_true', default=False, dest='build_efi_image',
                         help='Build efi image')
 
@@ -355,9 +379,14 @@ if __name__ == '__main__':
 
     print args
 
+    target_dir = args.recipe_dir
+
+    if target_dir is None:
+        target_dir  = _SELECTED_TARGET_DIR
+
     check_env(args.kernel_dir, args.rootfs_dir)
 
-    build_target = get_build_target()
+    build_target = select_build_target(target_dir)
 
     build_kernel(arch=build_target.board_config.arch,
                  config=build_target.kernel_config,
@@ -367,3 +396,4 @@ if __name__ == '__main__':
     build_rootfs()
 
     generate_image(build_target.board_config.arch, args.build_efi_image)
+
