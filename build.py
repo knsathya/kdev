@@ -49,6 +49,7 @@ _ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "rootfs", "root
 _KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "kernel"))
 _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
 _KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", None)
+_ROOTFS_OUT_DIR = os.getenv("KDEV_ROOTFS_OUT", None)
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.path.join(os.getcwd(), "target-recipes"))
 _SELECTED_TARGET_DIR = os.getenv("SELECTED_TARGET_DIR", None)
 
@@ -194,6 +195,13 @@ def build_rootfs():
     os.system(("sudo umount %s" % temp_dir))
     os.removedirs(temp_dir)
 
+def sync_rootfs():
+    logger.info("Syncing rootfs")
+    rsync_cmd = ["rsync -a"]
+    rsync_cmd.append(_ROOTFS_DIR + "/")
+    rsync_cmd.append(_ROOTFS_OUT_DIR)
+    os.system(' '.join(rsync_cmd))
+
 def build_kernel(arch, config, use_efi_header, rootfs_dir, kernel_dir, out_dir):
     logger.info("Building kernel")
     kobj = BuildKernel(kernel_dir)
@@ -254,7 +262,7 @@ def get_build_target():
 
 def select_build_target(target_dir=None):
 
-    global _OUT_DIR, _KERNEL_OUT_DIR
+    global _OUT_DIR, _KERNEL_OUT_DIR, _ROOTFS_OUT_DIR
     recipe = None
 
     if target_dir is not None:
@@ -285,11 +293,18 @@ def select_build_target(target_dir=None):
     if not os.path.exists(_KERNEL_OUT_DIR):
         os.mkdir(_KERNEL_OUT_DIR, 0775)
 
+    #mkdir rootfs our dir
+    if _ROOTFS_OUT_DIR is None:
+        _ROOTFS_OUT_DIR = os.path.join(_OUT_DIR, "rootfs")
+    if not os.path.exists(_ROOTFS_OUT_DIR):
+        os.mkdir(_ROOTFS_OUT_DIR, 0775)
+
     logger.debug("Building target image for %s", recipe.target_name())
     logger.info("Kernel Source %s", _KERNEL_DIR)
     logger.info("Rootfs Source %s", _ROOTFS_DIR)
     logger.info("Out dir %s", _OUT_DIR)
     logger.info("Kernel Out dir %s", _KERNEL_OUT_DIR)
+    logger.info("Rootfs Out dir %s", _ROOTFS_OUT_DIR)
     logger.info("RECIPE INFO:")
     logger.info("%s", recipe)
     logger.info("Build Params:")
@@ -402,9 +417,11 @@ if __name__ == '__main__':
 
     build_target = select_build_target(target_dir)
 
+    sync_rootfs()
+
     build_kernel(arch=build_target.board_config.arch,
                  config=build_target.kernel_config,
-                 use_efi_header=True, rootfs_dir=_ROOTFS_DIR,
+                 use_efi_header=True, rootfs_dir=_ROOTFS_OUT_DIR,
                  kernel_dir=_KERNEL_DIR, out_dir=_KERNEL_OUT_DIR)
 
     build_rootfs()
