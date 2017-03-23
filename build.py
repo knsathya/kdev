@@ -209,6 +209,7 @@ def build_kernel(arch, config, use_efi_header, rootfs_dir, kernel_dir, out_dir):
                        rootfs=rootfs_dir, out=out_dir,
                        threads=multiprocessing.cpu_count())
     kobj.make_kernel(log=False)
+    kobj.make_mod_install(modpath=rootfs_dir, log=False)
 
 def generate_image(arch, build_efi_image=False, build_android_image=False, build_yocto_image=False):
 

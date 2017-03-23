@@ -299,6 +299,24 @@ class BuildKernel(object):
 
         self.__exec_cmd__(self.__format_command__(flags), log)
 
+    def make_mod_install(self, flags=[], modpath=None, log=False):
+        modinstall_cmd = []
+        if not os.path.exists(self.build_params['out']):
+            os.mkdir(self.build_params['out'])
+
+        if type(flags) is not list:
+                raise Exception("Invalid make flags")
+
+        if modpath is not None:
+            if os.path.exists(os.path.expanduser(modpath)):
+                modinstall_cmd.append("INSTALL_MOD_PATH=" + modpath)
+            else:
+                raise Exception("modpath does not exist")
+
+        modinstall_cmd.append("modules_install")
+
+        self.__exec_cmd__(self.__format_command__(flags + modinstall_cmd), log)
+
     def __str_build_params__(self):
         build_str = "Build Params :\n" + \
         "Arch : " + self.build_params['arch'] + "\n" + \
