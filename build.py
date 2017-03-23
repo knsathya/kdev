@@ -48,7 +48,7 @@ _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
 _ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "rootfs", "rootfs"))
 _KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "kernel"))
 _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
-_KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", os.path.join(os.getcwd(), "out","kernel-obj"))
+_KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", None)
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.path.join(os.getcwd(), "target-recipes"))
 _SELECTED_TARGET_DIR = os.getenv("SELECTED_TARGET_DIR", None)
 
@@ -254,6 +254,7 @@ def get_build_target():
 
 def select_build_target(target_dir=None):
 
+    global _OUT_DIR, _KERNEL_OUT_DIR
     recipe = None
 
     if target_dir is not None:
@@ -268,6 +269,21 @@ def select_build_target(target_dir=None):
 
     if recipe is None:
         recipe = get_build_target()
+
+    # mkdir out dir
+    if not os.path.exists(_OUT_DIR):
+        os.mkdir(_OUT_DIR, 0775)
+
+    # mdkir recipe out dir
+    _OUT_DIR = os.path.join(_OUT_DIR, recipe.target_name())
+    if not os.path.exists(_OUT_DIR):
+        os.mkdir(_OUT_DIR, 0775)
+
+    #mkdir kernel our dir
+    if _KERNEL_OUT_DIR is None:
+        _KERNEL_OUT_DIR = os.path.join(_OUT_DIR, "kernel-obj")
+    if not os.path.exists(_KERNEL_OUT_DIR):
+        os.mkdir(_KERNEL_OUT_DIR, 0775)
 
     logger.debug("Building target image for %s", recipe.target_name())
     logger.info("Kernel Source %s", _KERNEL_DIR)
@@ -306,11 +322,12 @@ def is_valid_recipe(parser, arg):
 
         return arg
 
-def check_env(kernel_dir, rootfs_dir):
+def check_env(kernel_dir, rootfs_dir, out_dir):
 
     print "test"
 
     global _ROOTFS_DIR, _KERNEL_DIR
+    global _OUT_DIR
 
     if kernel_dir is not None and os.path.exists(kernel_dir):
         _KERNEL_DIR = kernel_dir
@@ -332,13 +349,10 @@ def check_env(kernel_dir, rootfs_dir):
         logger.error("dir %s does not exist", _ROOTFS_DIR)
         raise IOError
 
-    logger.info("Kernel Source %s", _KERNEL_DIR)
-    logger.info("Rootfs Source %s", _ROOTFS_DIR)
-    logger.info("target-recipes %s", _TARGET_RECIPES_DIR)
-    logger.info("Out dir %s", _OUT_DIR)
-    logger.info("Kernel Out dir %s", _KERNEL_OUT_DIR)
-    logger.info("RECIPE INFO:")
-
+    if out_dir is not None:
+        if not os.path.exists(os.path.expanduser(out_dir)):
+            os.mkdir(out_dir, 0775)
+            _OUT_DIR = out_dir
 
 if __name__ == '__main__':
 
@@ -384,7 +398,7 @@ if __name__ == '__main__':
     if target_dir is None:
         target_dir  = _SELECTED_TARGET_DIR
 
-    check_env(args.kernel_dir, args.rootfs_dir)
+    check_env(args.kernel_dir, args.rootfs_dir, args.out_dir)
 
     build_target = select_build_target(target_dir)
 
