@@ -1,2 +1,2 @@
 # kdev
-Kernel development repo with minimal rootfs 
+Linux kernel build script to build kernel with minimal rootfs 
