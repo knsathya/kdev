@@ -61,10 +61,10 @@ class BoardConfig(object):
     def __init__(self, cfg):
 
         # Minimum config file sections
-        min_cfg_sections = ['BUILD_OPTIONS']
+        min_cfg_sections = ['BOARD_OPTIONS']
 
         # build config sections and options
-        build_section_name = "BUILD_OPTIONS"
+        build_section_name = "BOARD_OPTIONS"
         build_cfg_options = ['arch', 'soc', 'board', 'version']
 
         self.cfg_file = cfg
