@@ -33,6 +33,7 @@ from BuildKernel import BuildKernel
 import argparse
 import tempfile
 from shutil import copyfile, move
+from board_config import KdevBoardConfig
 
 _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
 _ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "rootfs", "rootfs"))
@@ -56,62 +57,11 @@ def glob_recursive(root, pattern):
 
     return file_list
 
-class BoardConfig(object):
-
-    def __init__(self, cfg):
-
-        # Minimum config file sections
-        min_cfg_sections = ['board_options']
-
-        # build config sections and options
-        build_section_name = "board_options"
-        build_cfg_options = ['arch', 'soc', 'board', 'version']
-
-        self.cfg_file = cfg
-
-        try:
-            self.parser = ConfigParser.ConfigParser()
-            self.parser.read(self.cfg_file)
-        except ConfigParser.ParsingError, err:
-            raise Exception("Config parse error")
-
-        sections = self.parser.sections()
-        if not set(min_cfg_sections).issubset(set(sections)):
-            raise Exception("Missing config sections error")
-
-        #build section checks
-        build_options = self.parser.options(build_section_name)
-        if not set(build_cfg_options).issubset(set(build_options)):
-            raise Exception("Missing config options error")
-
-        get_build_option = lambda x : self.parser.get(build_section_name, x)
-
-        self.arch = get_build_option("arch")
-        self.soc = get_build_option("soc")
-        self.board = get_build_option("board")
-        self.version = get_build_option("version")
-
-    def __str__(self):
-        out_str= ""
-
-        out_str_append = lambda x,y : out_str + x + " = " + y +"\n"
-
-        out_str = out_str_append("ARCH", self.arch)
-        out_str = out_str_append("SOC", self.soc)
-        out_str = out_str_append("BOARD", self.board)
-        out_str = out_str_append("VERSION", self.version)
-
-        return out_str
-
-
 class BuildRecipe(object):
 
     def __init__(self, root):
 
         board_cfg = "board.cfg"
-        kernel_cmdline = "cmdline"
-        kernel_config = "kernel.config"
-        kernel_diff_config = "kernel_diff.config"
 
         if not os.path.isdir(root):
             logger.warn("%s: invalid build recipe root", root)
@@ -122,44 +72,40 @@ class BuildRecipe(object):
             logger.warn("%s: board config file missing", board_conf_file)
             raise IOError
 
-        self.board_config = BoardConfig(board_conf_file)
+        self.board_config = KdevBoardConfig(board_conf_file)
+        self.board_options = self.board_config.board_options
+        self.build_options = self.board_config.build_options
+        self.rootfs_options = self.board_config.rootfs_options
+        self.bootimg_options = self.board_config.bootimg_options
 
-        kernel_config_file = os.path.join(root, kernel_config)
-        if not os.path.isfile(kernel_config_file):
-            logger.warn("%s: kernel config file missing", kernel_config_file)
+        if not os.path.isfile(self.build_options.kernel_config):
+            logger.warn("%s: kernel config file missing",
+                    self.build_options.kernel_config)
             raise IOError
 
-        self.kernel_config = kernel_config_file
+        self.kernel_config = self.build_options.kernel_config
 
-        kernel_cmdline_file = os.path.join(root, kernel_cmdline)
-        if not os.path.isfile(kernel_cmdline_file):
-            logger.warn("%s: kernel cmdline file missing", kernel_cmdline_file)
+        if not os.path.isfile(self.build_options.cmdline):
+            logger.warn("%s: kernel cmdline file missing",
+                    self.build_options.cmdline)
             raise IOError
 
-        self.kernel_cmdline = kernel_cmdline_file
+        self.kernel_cmdline = self.build_options.cmdline
 
-        kernel_diff_config_file = os.path.join(root, kernel_diff_config)
-        if not os.path.isfile(kernel_cmdline_file):
-            logger.warn("%s: kernel diff config file missing", kernel_diff_config_file)
-            self.kernel_diff_config = None
-        else:
-            self.kernel_diff_config = kernel_diff_config_file
+        self.kernel_diff_config = self.build_options.kernel_diffconfig
+        if self.kernel_diff_config is None:
+            logger.warn("%s: kernel diff config file missing",
+                    self.kernel_diff_config)
 
-    def target_name(self):
-        out_str = self.board_config.soc
-        if not self.board_config.board == "":
-            out_str += "_" + self.board_config.board
-        if not self.board_config.version == "":
-            out_str += "_" + self.board_config.version
-
-        return out_str
+        self.target_name = self.board_config.board_options.target_name
+        self.target_arch = self.board_config.board_options.arch
 
     def __str__(self):
         out_str= ""
 
         out_str_append = lambda x,y : out_str + x + " = " + y +"\n"
 
-        out_str = out_str_append("BOARD_CONFIG", self.board_config.cfg_file)
+        out_str = out_str_append("BOARD_CONFIG", self.board_config.cfg)
         out_str = out_str_append("KERNEL_CONFIG", self.kernel_config)
         out_str = out_str_append("KERNEL_CMDLINE", self.kernel_cmdline)
         out_str = out_str_append("KERNEL_DIFFCONFIG",
@@ -239,7 +185,7 @@ def get_build_target():
         index = 0
         for recipe in valid_recipes:
             index = index + 1
-            print str(index) + " : " + recipe.target_name()
+            print str(index) + " : " + recipe.target_name
 
         user_input = raw_input("Please select build target: \n")
         if user_input.isdigit():
@@ -274,7 +220,7 @@ def select_build_target(target_dir=None):
         os.mkdir(_OUT_DIR, 0775)
 
     # mdkir recipe out dir
-    _OUT_DIR = os.path.join(_OUT_DIR, recipe.target_name())
+    _OUT_DIR = os.path.join(_OUT_DIR, recipe.target_name)
     if not os.path.exists(_OUT_DIR):
         os.mkdir(_OUT_DIR, 0775)
 
@@ -290,7 +236,7 @@ def select_build_target(target_dir=None):
     if not os.path.exists(_ROOTFS_OUT_DIR):
         os.mkdir(_ROOTFS_OUT_DIR, 0775)
 
-    logger.debug("Building target image for %s", recipe.target_name())
+    logger.debug("Building target image for %s", recipe.target_name)
     logger.info("Kernel Source %s", _KERNEL_DIR)
     logger.info("Rootfs Source %s", _ROOTFS_DIR)
     logger.info("Out dir %s", _OUT_DIR)
@@ -299,7 +245,7 @@ def select_build_target(target_dir=None):
     logger.info("RECIPE INFO:")
     logger.info("%s", recipe)
     logger.info("Build Params:")
-    logger.info("%s", recipe.board_config)
+    logger.info("%s", recipe.board_options)
 
     return recipe
 
@@ -381,8 +327,7 @@ if __name__ == '__main__':
                         type=lambda x: is_valid_directory(parser, x),
                         help='target recipe directory')
 
-    parser.add_argument('--build-efi', action='store_true', default=False, dest='build_efi_image',
-                        help='Build efi image')
+    parser.add_argument('--build-efi', action='store_true', dest='build_efi_image', help='Build efi image')
 
     android_group = parser.add_argument_group('build-android')
     android_group.add_argument('--build-android', action="store_true", default=False, dest='build_android_image',
@@ -406,16 +351,18 @@ if __name__ == '__main__':
 
     check_env(args.kernel_dir, args.rootfs_dir, args.out_dir)
 
-    build_target = select_build_target(target_dir)
+    recipe = select_build_target(target_dir)
 
     sync_rootfs()
 
-    build_kernel(arch=build_target.board_config.arch,
-                 config=build_target.kernel_config,
+    build_kernel(arch=recipe.target_arch,
+                 config=recipe.kernel_config,
                  use_efi_header=True, rootfs_dir=_ROOTFS_OUT_DIR,
                  kernel_dir=_KERNEL_DIR, out_dir=_KERNEL_OUT_DIR)
 
     build_rootfs()
 
-    generate_image(build_target.board_config.arch, args.build_efi_image)
+    build_efi_image = args.build_efi_image | recipe.build_options.build_efi
+
+    generate_image(recipe.target_arch, build_efi_image)
 
