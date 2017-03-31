@@ -43,6 +43,7 @@ _KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", None)
 _ROOTFS_OUT_DIR = os.getenv("KDEV_ROOTFS_OUT", None)
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.path.join(os.getcwd(), "target-recipes"))
 _SELECTED_TARGET_DIR = os.getenv("SELECTED_TARGET_DIR", None)
+_DIR_MODE = 0775
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
@@ -62,6 +63,30 @@ class BuildRecipe(object):
     def __init__(self, root):
 
         board_cfg = "board.cfg"
+
+        #initalize some basic env variables
+        self.recipe_dir = root
+        self.out = _OUT_DIR
+        self.kernel_src = _KERNEL_DIR
+        self.rootfs_src = _ROOTFS_DIR
+        self.kernel_out = _KERNEL_OUT_DIR
+        self.rootfs_out = _ROOTFS_OUT_DIR
+        #initalize kernel build options
+        self.kernel_config = "None"
+        self.kernel_cmdline = "None"
+        self.kernel_diffconfig = "None"
+        self.target_arch = "x86_64"
+        #initalize some board options
+        self.board_config = None
+        self.board_options = None
+        self.build_options = None
+        self.rootfs_options = None
+        self.bootimg_options = None
+        self.target_name = "qemu_x86_64"
+        self.build_efi = False
+        self.build_bootimg = False
+        self.build_yocto = False
+        self.kobj = None
 
         if not os.path.isdir(root):
             logger.warn("%s: invalid build recipe root", root)
@@ -96,61 +121,113 @@ class BuildRecipe(object):
         if self.kernel_diff_config is None:
             logger.warn("%s: kernel diff config file missing",
                     self.kernel_diff_config)
+            self.kernel_diff_config = "None"
 
         self.target_name = self.board_config.board_options.target_name
         self.target_arch = self.board_config.board_options.arch
+        self.build_efi = self.build_options.build_efi
+        self.build_bootimg = self.build_options.build_bootimg
+        self.build_yocto = self.build_options.build_yocto
+
+    def __sync_rootfs__(self):
+        logger.info("Syncing rootfs")
+        rsync_cmd = ["rsync -a"]
+        rsync_cmd.append(self.rootfs_src + "/")
+        rsync_cmd.append(self.rootfs_out)
+        os.system(' '.join(rsync_cmd))
+
+    def init_build(self, out=_OUT_DIR, kernel_src=_KERNEL_DIR,
+            rootfs_src=_ROOTFS_DIR, build_efi=False,
+            build_bootimg=False, build_yocto=False):
+
+        self.out = out
+        self.kernel_src = kernel_src
+        self.rootfs_src = rootfs_src
+        self.build_efi = True if build_efi else False
+        self.build_bootimg = True if build_bootimg else False
+        self.build_yocto = True if build_yocto else False
+
+        # mkdir out dir
+        if not os.path.exists(self.out):
+            os.mkdir(self.out, _DIR_MODE)
+
+        # mdkir recipe out dir
+        self.out = os.path.join(self.out, recipe.target_name)
+        if not os.path.exists(self.out):
+            os.mkdir(self.out, _DIR_MODE)
+
+        #mkdir kernel out dir
+        if self.kernel_out is None:
+            self.kernel_out = os.path.join(self.out, "kernel-obj")
+        if not os.path.exists(self.kernel_out):
+            os.mkdir(self.kernel_out, _DIR_MODE)
+
+        #mkdir rootfs our dir
+        if self.rootfs_out is None:
+            self.rootfs_out = os.path.join(self.out, "rootfs")
+        if not os.path.exists(self.rootfs_out):
+            os.mkdir(self.rootfs_out, _DIR_MODE)
+
+        self.__sync_rootfs__()
+
+        logger.debug("Building target image for %s", self.target_name)
+        logger.info("Recipe info %s", self)
+
+    def __build_kernel__(self):
+        logger.info("Building kernel")
+        kobj = BuildKernel(self.kernel_src)
+        kobj.set_build_env(arch=self.target_arch,
+                config=self.kernel_config,
+                use_efi_header=self.build_efi,
+                rootfs=self.rootfs_out, out=self.kernel_out,
+                threads=multiprocessing.cpu_count())
+        kobj.make_kernel(log=False)
+        kobj.make_mod_install(modpath=self.rootfs_out, log=False)
+
+    def __build_rootfs__(self):
+        logger.info("Building rootfs")
+        rootfs_image = os.path.join(self.out, "rootfs.img")
+        rootfs_ext2_image = os.path.join(self.out, "rootfs.img.ext2")
+        cwd = os.getcwd()
+        os.chdir(self.rootfs_out)
+        os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
+        os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
+        os.system("mkfs.ext2 -F %s -L rootfs" % (rootfs_ext2_image))
+        os.chdir(cwd)
+        temp_dir = tempfile.mkdtemp()
+        os.system("sudo mount -o loop,rw,sync %s %s" % (rootfs_ext2_image, temp_dir))
+        os.chdir(temp_dir)
+        os.system("sudo gzip -cd %s | sudo cpio -imd --quiet" % (rootfs_image))
+        os.chdir(cwd)
+        os.system(("sudo umount %s" % temp_dir))
+        os.removedirs(temp_dir)
+
+    def start_build(self):
+        logger.debug("starting build\n")
+
+        self.__build_kernel__()
+        self.__build_rootfs__()
+
+    def generate_images(self):
+        logger.debug("generate images\n")
+        if self.build_efi:
+            copyfile(os.path.join(self.kernel_out, "arch",
+                self.target_arch, "boot", "bzImage"),
+                os.path.join(self.out, "bzImage.efi"))
 
     def __str__(self):
-        out_str= ""
+        out_str= "\n"
 
-        out_str_append = lambda x,y : out_str + x + " = " + y +"\n"
+        out_str_append = lambda x,y : out_str + "\t" + x + " = " + y +"\n"
 
-        out_str = out_str_append("BOARD_CONFIG", self.board_config.cfg)
-        out_str = out_str_append("KERNEL_CONFIG", self.kernel_config)
-        out_str = out_str_append("KERNEL_CMDLINE", self.kernel_cmdline)
-        out_str = out_str_append("KERNEL_DIFFCONFIG",
-                                 self.kernel_diff_config if self.kernel_diff_config is not None else "None")
+        out_str += "env options:\n"
+        out_str = out_str_append("kernel src", self.kernel_src)
+        out_str = out_str_append("rootfs src", self.rootfs_src)
+        out_str = out_str_append("out dir", self.out)
+        out_str = out_str_append("kernel out dir", self.kernel_out)
+        out_str += '%s' % self.board_config
 
         return out_str
-
-def build_rootfs():
-    logger.info("Building rootfs")
-    rootfs_image = os.path.join(_OUT_DIR, "rootfs.img")
-    rootfs_ext2_image = os.path.join(_OUT_DIR, "rootfs.img.ext2")
-    cwd = os.getcwd()
-    os.chdir(_ROOTFS_DIR)
-    os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
-    os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
-    os.system("mkfs.ext2 -F %s -L rootfs" % (rootfs_ext2_image))
-    os.chdir(cwd)
-    temp_dir = tempfile.mkdtemp()
-    os.system("sudo mount -o loop,rw,sync %s %s" % (rootfs_ext2_image, temp_dir))
-    os.chdir(temp_dir)
-    os.system("sudo gzip -cd %s | sudo cpio -imd --quiet" % (rootfs_image))
-    os.chdir(cwd)
-    os.system(("sudo umount %s" % temp_dir))
-    os.removedirs(temp_dir)
-
-def sync_rootfs():
-    logger.info("Syncing rootfs")
-    rsync_cmd = ["rsync -a"]
-    rsync_cmd.append(_ROOTFS_DIR + "/")
-    rsync_cmd.append(_ROOTFS_OUT_DIR)
-    os.system(' '.join(rsync_cmd))
-
-def build_kernel(arch, config, use_efi_header, rootfs_dir, kernel_dir, out_dir):
-    logger.info("Building kernel")
-    kobj = BuildKernel(kernel_dir)
-    kobj.set_build_env(arch=arch, config=config, use_efi_header=use_efi_header,
-                       rootfs=rootfs_dir, out=out_dir,
-                       threads=multiprocessing.cpu_count())
-    kobj.make_kernel(log=False)
-    kobj.make_mod_install(modpath=rootfs_dir, log=False)
-
-def generate_image(arch, build_efi_image=False, build_android_image=False, build_yocto_image=False):
-
-    if build_efi_image:
-        copyfile(os.path.join(_KERNEL_OUT_DIR, "arch", arch, "boot", "bzImage"), os.path.join(_OUT_DIR, "bzImage.efi"))
 
 def get_build_target():
     valid_recipes = []
@@ -197,9 +274,7 @@ def get_build_target():
 
     return selected_target
 
-def select_build_target(target_dir=None):
-
-    global _OUT_DIR, _KERNEL_OUT_DIR, _ROOTFS_OUT_DIR
+def select_build_target(target_dir):
     recipe = None
 
     if target_dir is not None:
@@ -214,38 +289,6 @@ def select_build_target(target_dir=None):
 
     if recipe is None:
         recipe = get_build_target()
-
-    # mkdir out dir
-    if not os.path.exists(_OUT_DIR):
-        os.mkdir(_OUT_DIR, 0775)
-
-    # mdkir recipe out dir
-    _OUT_DIR = os.path.join(_OUT_DIR, recipe.target_name)
-    if not os.path.exists(_OUT_DIR):
-        os.mkdir(_OUT_DIR, 0775)
-
-    #mkdir kernel our dir
-    if _KERNEL_OUT_DIR is None:
-        _KERNEL_OUT_DIR = os.path.join(_OUT_DIR, "kernel-obj")
-    if not os.path.exists(_KERNEL_OUT_DIR):
-        os.mkdir(_KERNEL_OUT_DIR, 0775)
-
-    #mkdir rootfs our dir
-    if _ROOTFS_OUT_DIR is None:
-        _ROOTFS_OUT_DIR = os.path.join(_OUT_DIR, "rootfs")
-    if not os.path.exists(_ROOTFS_OUT_DIR):
-        os.mkdir(_ROOTFS_OUT_DIR, 0775)
-
-    logger.debug("Building target image for %s", recipe.target_name)
-    logger.info("Kernel Source %s", _KERNEL_DIR)
-    logger.info("Rootfs Source %s", _ROOTFS_DIR)
-    logger.info("Out dir %s", _OUT_DIR)
-    logger.info("Kernel Out dir %s", _KERNEL_OUT_DIR)
-    logger.info("Rootfs Out dir %s", _ROOTFS_OUT_DIR)
-    logger.info("RECIPE INFO:")
-    logger.info("%s", recipe)
-    logger.info("Build Params:")
-    logger.info("%s", recipe.board_options)
 
     return recipe
 
@@ -278,33 +321,20 @@ def check_env(kernel_dir, rootfs_dir, out_dir):
 
     print "test"
 
-    global _ROOTFS_DIR, _KERNEL_DIR
-    global _OUT_DIR
-
-    if kernel_dir is not None and os.path.exists(kernel_dir):
-        _KERNEL_DIR = kernel_dir
-
-    if rootfs_dir is not None and os.path.exists(rootfs_dir):
-        _ROOTFS_DIR = rootfs_dir
-
     #check if kernel_dir is valid
-    if not os.path.exists(os.path.expanduser(_KERNEL_DIR)):
-        logger.error("dir %s does not exist", _KERNEL_DIR)
+    if not os.path.exists(os.path.expanduser(kernel_dir)):
+        logger.error("dir %s does not exist", kernel_dir)
         raise IOError
 
-    if not os.path.exists(os.path.join(os.path.expanduser(_KERNEL_DIR), 'Makefile')):
-        logger.error("Invalid kernel %s", _KERNEL_DIR)
+    #check if its a valid kernel source
+    if not os.path.exists(os.path.join(os.path.expanduser(kernel_dir), 'Makefile')):
+        logger.error("Invalid kernel %s", kernel_dir)
         raise IOError
 
     #check if rootfs is valid
-    if not os.path.exists(os.path.expanduser(_ROOTFS_DIR)):
-        logger.error("dir %s does not exist", _ROOTFS_DIR)
+    if not os.path.exists(os.path.expanduser(rootfs_dir)):
+        logger.error("dir %s does not exist", rootfs_dir)
         raise IOError
-
-    if out_dir is not None:
-        if not os.path.exists(os.path.expanduser(out_dir)):
-            os.mkdir(out_dir, 0775)
-            _OUT_DIR = out_dir
 
 if __name__ == '__main__':
 
@@ -313,27 +343,25 @@ if __name__ == '__main__':
 
     parser.add_argument('-k', '--kernel-dir', action='store', dest='kernel_dir',
                         type=lambda x: is_valid_kernel(parser, x),
+                        default=_KERNEL_DIR,
                         help='kernel source directory')
 
     parser.add_argument('-r', '--rootfs-dir', action='store', dest='rootfs_dir',
                         type=lambda x: is_valid_directory(parser, x),
+                        default=_ROOTFS_DIR,
                         help='rootfs directory')
 
     parser.add_argument('-o', '--out-dir', action='store', dest='out_dir',
                         type=lambda x: is_valid_directory(parser, x),
+                        default=_OUT_DIR,
                         help='out directory')
 
     parser.add_argument('-t', '--target-recipe', action='store', dest='recipe_dir',
                         type=lambda x: is_valid_directory(parser, x),
+                        default=_SELECTED_TARGET_DIR,
                         help='target recipe directory')
 
     parser.add_argument('--build-efi', action='store_true', dest='build_efi_image', help='Build efi image')
-
-    android_group = parser.add_argument_group('build-android')
-    android_group.add_argument('--build-android', action="store_true", default=False, dest='build_android_image',
-                               help='Build android image')
-    android_group.add_argument('--pk8', metavar='pk8-cert', type=argparse.FileType('rt'), help="pk8 certificate")
-    android_group.add_argument('--x509', metavar='x509-cert', type=argparse.FileType('rt'), help="x509 certificate")
 
     parser.add_argument('--log', action='store_true', default=False, dest='use_log',
                         help='logs to file')
@@ -346,23 +374,13 @@ if __name__ == '__main__':
 
     target_dir = args.recipe_dir
 
-    if target_dir is None:
-        target_dir  = _SELECTED_TARGET_DIR
-
     check_env(args.kernel_dir, args.rootfs_dir, args.out_dir)
 
-    recipe = select_build_target(target_dir)
+    recipe = select_build_target(args.recipe_dir)
 
-    sync_rootfs()
+    recipe.init_build(args.out_dir, args.kernel_dir,
+            args.rootfs_dir, args.build_efi_image)
 
-    build_kernel(arch=recipe.target_arch,
-                 config=recipe.kernel_config,
-                 use_efi_header=True, rootfs_dir=_ROOTFS_OUT_DIR,
-                 kernel_dir=_KERNEL_DIR, out_dir=_KERNEL_OUT_DIR)
+    recipe.start_build()
 
-    build_rootfs()
-
-    build_efi_image = args.build_efi_image | recipe.build_options.build_efi
-
-    generate_image(recipe.target_arch, build_efi_image)
-
+    recipe.generate_images()
