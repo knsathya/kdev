@@ -218,7 +218,7 @@ class BuildRecipe(object):
     def __str__(self):
         out_str= "\n"
 
-        out_str_append = lambda x,y : out_str + "\t" + x + " = " + y +"\n"
+        out_str_append = lambda x,y : out_str + "\t" + x + " = " + y +"\n" if x is not None and y is not None else "None"
 
         out_str += "env options:\n"
         out_str = out_str_append("kernel src", self.kernel_src)
@@ -249,7 +249,7 @@ def get_build_target():
             recipe = None
 
         if recipe is not None:
-            logger.debug("valid recipe %s", recipe)
+            logger.debug("valid recipe %s", recipe.target_name)
             valid_recipes.append(recipe)
 
     if len(valid_recipes) <= 0:
