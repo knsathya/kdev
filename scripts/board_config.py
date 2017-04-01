@@ -144,7 +144,9 @@ class BoardCfgParser(SafeConfigParser, object):
 
     rootfs_options = {
             "use_initramfs" : "getboolean",
-            "rootfs_name" : "get"
+            "rootfs_name" : "get",
+            "gen_cpioimage" : "getboolean",
+            "gen_hdimage" : "getboolean"
             }
 
     bootimg_options = {

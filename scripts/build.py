@@ -86,6 +86,11 @@ class BuildRecipe(object):
         self.build_efi = False
         self.build_bootimg = False
         self.build_yocto = False
+        #rootfs options
+        self.rootfs_name = "busybox"
+        self.use_initramfs = False
+        self.gen_cpioimage = False
+        self.gen_hdimage = False
         self.kobj = None
 
         if not os.path.isdir(root):
@@ -129,6 +134,10 @@ class BuildRecipe(object):
         self.build_efi = self.build_options.build_efi
         self.build_bootimg = self.build_options.build_bootimg
         self.build_yocto = self.build_options.build_yocto
+        self.use_initramfs = self.rootfs_options.use_initramfs
+        self.rootfs_name = self.rootfs_options.rootfs_name
+        self.gen_cpioimage = self.rootfs_options.gen_cpioimage
+        self.gen_hdimage = self.rootfs_options.gen_hdimage
 
     def __sync_rootfs__(self):
         logger.info("Syncing rootfs")
