@@ -124,6 +124,7 @@ class BuildRecipe(object):
             self.kernel_diff_config = "None"
 
         self.target_name = self.board_config.board_options.target_name
+        self.board_name = self.board_config.board_options.board
         self.target_arch = self.board_config.board_options.arch
         self.build_efi = self.build_options.build_efi
         self.build_bootimg = self.build_options.build_bootimg
@@ -190,6 +191,10 @@ class BuildRecipe(object):
         rootfs_ext2_image = os.path.join(self.out, "rootfs.img.ext2")
         cwd = os.getcwd()
         os.chdir(self.rootfs_out)
+        hostname = os.path.join(self.rootfs_out, 'etc', 'hostname')
+        with open(hostname, 'w+') as fp:
+            fp.truncate()
+            fp.write(self.board_name)
         os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
         os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
         os.system("mkfs.ext2 -F %s -L rootfs" % (rootfs_ext2_image))
