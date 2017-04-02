@@ -42,7 +42,7 @@ from pyparsing import *
 import argparse
 import subprocess
 import tempfile
-from shutil import copyfile, move
+from shutil import copy, move
 from threading  import Thread
 
 
@@ -133,14 +133,14 @@ class BuildKernel(object):
         self.uname = "Linux version " + self.full_version
 
         # Initialize build params
-        self.build_params = {}
-        self.build_params['arch'] = "x86_64"
-        self.build_params['threads'] = multiprocessing.cpu_count()
-        self.build_params['rootfs'] = "Not using initramfs"
-        self.build_params['out'] = os.path.join(os.getcwd(), "out")
+        self.target_arch = "x86_64"
+        self.no_threads = multiprocessing.cpu_count()
+        self.rootfs_src = "No initramfs"
+        self.out = os.path.join(os.getcwd(), "out")
 
         # Initalize config params
-        self.config = None
+        self.config = os.path.join(self.kernel_dir, "arch", "x86",
+                "configs", "x86_64_defconfig")
         self.update_config_list = {}
 
         # Initalize efi/initramfs build flags
@@ -155,6 +155,17 @@ class BuildKernel(object):
         self.out_log = open(os.path.join(self.log_dir, 'out.log'), 'w')
         self.err_log = open(os.path.join(self.log_dir, 'err.log'), 'w')
 
+    def __set_build_env__(self):
+        # make out dir if not exist
+        if not os.path.exists(self.out):
+            os.makedirs(self.out)
+
+        # copy the config file
+        new_config = os.path.join(self.out, '.config')
+        if os.path.exists(self.config) and self.config != new_config:
+            copy(self.config, new_config)
+            self.config = new_config
+
     def set_build_env(self, arch="x86_64", config=None, use_efi_header=False, rootfs=None, out=None, threads=multiprocessing.cpu_count()):
         '''
         Set the build parameters for compilation.
@@ -166,11 +177,12 @@ class BuildKernel(object):
         :return: Throws exception if the input parameters are invalid.
         '''
         logger.debug(locals())
+
         if rootfs is not None:
             logger.debug("updating rootfs")
             if os.path.exists(rootfs):
                 self.use_init_ramfs = True
-                self.build_params['rootfs'] = rootfs
+                self.rootfs_src = rootfs
             else:
                 logger.error("rootfs dir %s does not exist", rootfs)
                 raise AttributeError
@@ -178,7 +190,7 @@ class BuildKernel(object):
         if out is not None:
             logger.debug("updating out")
             if os.path.exists(out):
-                self.build_params['out'] = out
+                self.out = out
             else:
                 logger.error("out dir %s does not exist", out)
                 raise AttributeError
@@ -186,25 +198,21 @@ class BuildKernel(object):
         if config is not None:
             logger.debug("updating config")
             if os.path.exists(config):
-                copyfile(config, os.path.join(self.build_params['out'], '.config'))
+                self.config = config
             else:
                 logger.error("config file does not exist")
                 raise AttributeError
-
-        if not os.path.exists(self.build_params['out']):
-            os.mkdir(self.build_params['out'])
-
-        if os.path.exists(os.path.join(self.build_params['out'],'.config')):
-            self.config = os.path.join(self.build_params['out'],'.config')
 
         if use_efi_header is not None:
             self.use_efi_header = use_efi_header
 
         if arch is not None:
-            self.build_params['arch'] = arch
+            self.target_arch =  arch
 
         if threads is not None:
-            self.build_params['threads'] = threads
+            self.no_threads = threads
+
+        self.__set_build_env__()
 
         logger.info(self.__str_build_params__())
 
@@ -214,9 +222,16 @@ class BuildKernel(object):
         :param config_list: [CONFIG_* = n/m/y]
         :return: Throws exception if the config_list input is invaid.
         '''
+
+        self.__set_build_env__()
+
+        if not os.path.exists(self.config):
+            logger.error("please first set config file using set_build_env() func\n")
+            raise AttributeError
+
         config_temp = tempfile.NamedTemporaryFile(suffix='.config', prefix='kernel_', dir=self.log_dir,)
-        if not os.path.exists(os.path.join(self.build_params['out'],'.config')):
-            logger.error("config file %s does not exist, please set proper build env", os.path.join(self.build_params['out'],'.config'))
+        if not os.path.exists(os.path.join(self.out,'.config')):
+            logger.error("config file %s does not exist, please set proper build env", os.path.join(self.out, '.config'))
             raise AttributeError
 
         if len(update_config_list) > 0:
@@ -243,86 +258,88 @@ class BuildKernel(object):
                 config_temp.write(config + "\n")
 
         config_temp.seek(0)
-        merge_command = [os.path.join(self.kernel_dir, "scripts/kconfig/merge_config.sh")]
+        merge_command = [os.path.join(self.kernel_dir, "scripts", "kconfig", "merge_config.sh")]
         merge_command.append("-m")
         merge_command.append("-O")
         merge_command.append(self.log_dir)
         merge_command.append(self.config)
         merge_command.append(config_temp.name)
         exec_command(merge_command)
-        move(os.path.join(self.log_dir, ".config"),  os.path.join(self.build_params['out'],'.config'))
-        self.config =  os.path.join(self.build_params['out'],'.config')
+        move(os.path.join(self.log_dir, ".config"),  os.path.join(self.out,'.config'))
+        self.config =  os.path.join(self.out,'.config')
         config_temp.close()
 
     def __exec_cmd__(self, cmd, log=False):
-
         if log is True:
             self.out_log.seek(0)
             self.out_log.truncate()
             self.err_log.seek(0)
             self.err_log.truncate()
-            exec_command(cmd, tee_log=True, out_log=self.out_log, err_log=self.err_log)
+            return exec_command(cmd, tee_log=True, out_log=self.out_log,
+                    err_log=self.err_log)
         else:
-            exec_command(cmd)
+            return exec_command(cmd)
 
-    def __format_command__(self, args=[]):
-        cmd = ["make"]
-        cmd.append("ARCH="+ self.build_params['arch'])
-        cmd.append("-j" + str(self.build_params['threads']))
-        cmd.append("O=" + self.build_params['out'])
-        cmd.append("-C")
-        cmd.append(self.kernel_dir)
-        cmd += args
+    def __make_cmd__(self, cmd="", flags=[], log=False):
+        # setup build environment
+        self.__set_build_env__()
+        # check for input validity
+        if type(flags) is not list:
+                raise Exception("Invalid make flags")
+        mkcmd = ["/usr/bin/make"]
+        mkcmd.append("ARCH="+ self.target_arch)
+        mkcmd.append("-j" + str(self.no_threads))
+        mkcmd.append("O=" + self.out)
+        mkcmd.append("-C")
+        mkcmd.append(self.kernel_dir)
+        mkcmd += flags
+        if cmd != "":
+            if cmd not in ["menuconfig", "xconfig", "oldconfig",
+                    "clean", "modules_install"]:
+                raise Exception("Invalid make cmd {0} ".format(cmd))
+            mkcmd += [cmd]
 
-        return cmd
+        return (self.__exec_cmd__(mkcmd, log) == 0)
 
     def make_menuconfig(self, flags=[], log=False):
-        if not os.path.exists(self.build_params['out']):
-            os.mkdir(self.build_params['out'])
+        if self.__make_cmd__("menuconfig", flags, log):
+            self.config =  os.path.join(self.out,'.config')
 
-        if type(flags) is not list:
-                raise Exception("Invalid make flags")
+    def make_oldconfig(self, flags=[], log=False):
+        if self.__make_cmd__("oldconfig", flags, log):
+            self.config =  os.path.join(self.out,'.config')
 
-        self.__exec_cmd__(self.__format_command__(flags + ['menuconfig']), log)
+    def make_defconfig(self, flags=[], log=False):
+        if self.__make_cmd__("defconfig", flags, log):
+            self.config =  os.path.join(self.out,'.config')
 
+    # return true on success
     def make_kernel(self, flags=[], log=False):
-        if not os.path.exists(self.build_params['out']):
-            os.mkdir(self.build_params['out'])
-
-        if type(flags) is not list:
-                raise Exception("Invalid make flags")
-
         if self.config is not None:
-            self.__exec_cmd__(self.__format_command__(flags + ['oldconfig']), log)
+            self.make_oldconfig(flags, log)
         else:
-            self.__exec_cmd__(self.__format_command__(flags + ['defconfig']), log)
+            self.make_defconfig(flags, log)
 
-        self.__exec_cmd__(self.__format_command__(flags), log)
+        return self.__make_cmd__(flags=flags, log=log)
 
+    # return true on success
     def make_mod_install(self, flags=[], modpath=None, log=False):
-        modinstall_cmd = []
-        if not os.path.exists(self.build_params['out']):
-            os.mkdir(self.build_params['out'])
-
         if type(flags) is not list:
                 raise Exception("Invalid make flags")
-
         if modpath is not None:
             if os.path.exists(os.path.expanduser(modpath)):
-                modinstall_cmd.append("INSTALL_MOD_PATH=" + modpath)
+                flags.append("INSTALL_MOD_PATH=" + modpath)
             else:
                 raise Exception("modpath does not exist")
 
-        modinstall_cmd.append("modules_install")
-
-        self.__exec_cmd__(self.__format_command__(flags + modinstall_cmd), log)
+        return self.__make_cmd__("modules_install", flags, log)
 
     def __str_build_params__(self):
         build_str = "Build Params :\n" + \
-        "Arch : " + self.build_params['arch'] + "\n" + \
-        "Rootfs : " + self.build_params['rootfs'] + "\n" + \
-        "Out : " + self.build_params['out'] + "\n" + \
-        "Threads : " + str(self.build_params['threads']) + "\n" + \
+        "Arch : " + self.target_arch + "\n" + \
+        "Rootfs : " + self.rootfs_src + "\n" + \
+        "Out : " + self.out + "\n" + \
+        "Threads : " + str(self.no_threads) + "\n" + \
         "Use EFI header : " + str(self.use_efi_header) + "\n" + \
         "Config FILE : " + self.config if self.config else "None" + "\n"
 
