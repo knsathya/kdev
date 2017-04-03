@@ -41,6 +41,7 @@ _KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "kernel"))
 _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
 _KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", None)
 _ROOTFS_OUT_DIR = os.getenv("KDEV_ROOTFS_OUT", None)
+_IMAGES_OUT_DIR = os.getenv("KDEV_IMAGES_OUT", None)
 _TARGET_RECIPES_DIR = os.getenv("TARGET_RECIPES", os.path.join(os.getcwd(), "target-recipes"))
 _SELECTED_TARGET_DIR = os.getenv("SELECTED_TARGET_DIR", None)
 _DIR_MODE = 0775
@@ -58,6 +59,16 @@ def glob_recursive(root, pattern):
 
     return file_list
 
+def sync_dirs(src, dst, sudo=False):
+    logger.info("Syncing %s to %s", src, dst)
+    if sudo:
+        rsync_cmd = ["sudo /usr/bin/rsync -a"]
+    else:
+        rsync_cmd = ["/usr/bin/rsync -a"]
+    rsync_cmd.append(src + "/")
+    rsync_cmd.append(dst)
+    os.system(' '.join(rsync_cmd))
+
 class BuildRecipe(object):
 
     def __init__(self, root):
@@ -71,6 +82,7 @@ class BuildRecipe(object):
         self.rootfs_src = _ROOTFS_DIR
         self.kernel_out = _KERNEL_OUT_DIR
         self.rootfs_out = _ROOTFS_OUT_DIR
+        self.images_out = _IMAGES_OUT_DIR
         #initalize kernel build options
         self.kernel_config = "None"
         self.kernel_cmdline = "None"
@@ -139,13 +151,6 @@ class BuildRecipe(object):
         self.gen_cpioimage = self.rootfs_options.gen_cpioimage
         self.gen_hdimage = self.rootfs_options.gen_hdimage
 
-    def __sync_rootfs__(self):
-        logger.info("Syncing rootfs")
-        rsync_cmd = ["rsync -a"]
-        rsync_cmd.append(self.rootfs_src + "/")
-        rsync_cmd.append(self.rootfs_out)
-        os.system(' '.join(rsync_cmd))
-
     def init_build(self, out=_OUT_DIR, kernel_src=_KERNEL_DIR,
             rootfs_src=_ROOTFS_DIR, build_efi=False,
             build_bootimg=False, build_yocto=False):
@@ -153,9 +158,10 @@ class BuildRecipe(object):
         self.out = out
         self.kernel_src = kernel_src
         self.rootfs_src = rootfs_src
-        self.build_efi = True if build_efi else False
-        self.build_bootimg = True if build_bootimg else False
-        self.build_yocto = True if build_yocto else False
+        # override gen image options
+        self.build_efi = True if build_efi else self.build_efi
+        self.build_bootimg = True if build_bootimg else self.build_bootimg
+        self.build_yocto = True if build_yocto else self.build_yocto
 
         # mkdir out dir
         if not os.path.exists(self.out):
@@ -178,7 +184,11 @@ class BuildRecipe(object):
         if not os.path.exists(self.rootfs_out):
             os.mkdir(self.rootfs_out, _DIR_MODE)
 
-        self.__sync_rootfs__()
+        #mkdir images out dir
+        if self.images_out is None:
+            self.images_out = os.path.join(self.out, "images")
+        if not os.path.exists(self.images_out):
+            os.mkdir(self.images_out, _DIR_MODE)
 
         logger.debug("Building target image for %s", self.target_name)
         logger.info("Recipe info %s", self)
@@ -196,38 +206,45 @@ class BuildRecipe(object):
 
     def __build_rootfs__(self):
         logger.info("Building rootfs")
-        rootfs_image = os.path.join(self.out, "rootfs.img")
-        rootfs_ext2_image = os.path.join(self.out, "rootfs.img.ext2")
-        cwd = os.getcwd()
-        os.chdir(self.rootfs_out)
+        logger.info("Syncing rootfs")
+        sync_dirs(self.rootfs_src, self.rootfs_out)
+        # change host name
         hostname = os.path.join(self.rootfs_out, 'etc', 'hostname')
         with open(hostname, 'w+') as fp:
             fp.truncate()
             fp.write(self.board_name)
-        os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
-        os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
-        os.system("mkfs.ext2 -F %s -L rootfs" % (rootfs_ext2_image))
-        os.chdir(cwd)
-        temp_dir = tempfile.mkdtemp()
-        os.system("sudo mount -o loop,rw,sync %s %s" % (rootfs_ext2_image, temp_dir))
-        os.chdir(temp_dir)
-        os.system("sudo gzip -cd %s | sudo cpio -imd --quiet" % (rootfs_image))
-        os.chdir(cwd)
-        os.system(("sudo umount %s" % temp_dir))
-        os.removedirs(temp_dir)
 
     def start_build(self):
         logger.debug("starting build\n")
-
-        self.__build_kernel__()
         self.__build_rootfs__()
+        self.__build_kernel__()
 
     def generate_images(self):
         logger.debug("generate images\n")
+        if self.gen_cpioimage:
+            logger.debug("generating cpio rootfs image\n")
+            rootfs_image = os.path.join(self.images_out, "rootfs.img")
+            cwd = os.getcwd()
+            os.chdir(self.rootfs_out)
+            os.system("find . | cpio --quiet -H newc -o | gzip -9 -n > %s" % (rootfs_image))
+            os.chdir(cwd)
+
+        if self.gen_hdimage:
+            logger.debug("generating hd rootfs image\n")
+            rootfs_ext2_image = os.path.join(self.images_out, "rootfs.img.ext2")
+            os.system("dd if=/dev/zero of=%s bs=1M count=1024" % (rootfs_ext2_image))
+            os.system("mkfs.ext2 -F %s -L rootfs" % (rootfs_ext2_image))
+            temp_dir = tempfile.mkdtemp()
+            os.system("sudo mount -o loop,rw,sync %s %s" % (rootfs_ext2_image, temp_dir))
+            sync_dirs(self.rootfs_out, temp_dir, True)
+            os.system(("sudo umount %s" % temp_dir))
+            os.removedirs(temp_dir)
+
         if self.build_efi:
+            logger.debug("generating efi kernel image\n")
             copyfile(os.path.join(self.kernel_out, "arch",
                 self.target_arch, "boot", "bzImage"),
-                os.path.join(self.out, "bzImage.efi"))
+                os.path.join(self.images_out, "bzImage.efi"))
 
     def __str__(self):
         out_str= "\n"
