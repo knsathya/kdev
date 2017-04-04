@@ -199,7 +199,8 @@ class BuildRecipe(object):
         kobj.set_build_env(arch=self.target_arch,
                 config=self.kernel_config,
                 use_efi_header=self.build_efi,
-                rootfs=self.rootfs_out, out=self.kernel_out,
+                rootfs=self.rootfs_out if self.use_initramfs else None,
+                out=self.kernel_out,
                 threads=multiprocessing.cpu_count())
         kobj.make_kernel(log=False)
         kobj.make_mod_install(modpath=self.rootfs_out, log=False)

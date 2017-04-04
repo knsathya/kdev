@@ -139,13 +139,12 @@ class BuildKernel(object):
         self.out = os.path.join(os.getcwd(), "out")
 
         # Initalize config params
-        self.config = os.path.join(self.kernel_dir, "arch", "x86",
-                "configs", "x86_64_defconfig")
+        self.config = None
         self.update_config_list = {}
 
         # Initalize efi/initramfs build flags
         self.use_efi_header = False
-        self.use_init_ramfs = False
+        self.use_initramfs = False
 
         self.log_dir = os.path.join(os.getcwd(), ".log", self.full_version)
 
@@ -155,16 +154,24 @@ class BuildKernel(object):
         self.out_log = open(os.path.join(self.log_dir, 'out.log'), 'w')
         self.err_log = open(os.path.join(self.log_dir, 'err.log'), 'w')
 
-    def __set_build_env__(self):
-        # make out dir if not exist
-        if not os.path.exists(self.out):
-            os.makedirs(self.out)
 
-        # copy the config file
+    def __config_update__(self, config=None):
+        if config == None:
+            config = self.config
+        if config is None:
+            return
         new_config = os.path.join(self.out, '.config')
-        if os.path.exists(self.config) and self.config != new_config:
-            copy(self.config, new_config)
-            self.config = new_config
+        if os.path.exists(config) and config != new_config:
+            copy(config, new_config)
+        self.config = new_config
+
+    def __out_dir_update__(self, out=None):
+        if out == None:
+            out = self.out
+        if not os.path.exists(out):
+            s.makedirs(out)
+        self.out = out
+        self.config = os.path.join(self.out, '.config')
 
     def set_build_env(self, arch="x86_64", config=None, use_efi_header=False, rootfs=None, out=None, threads=multiprocessing.cpu_count()):
         '''
@@ -181,7 +188,7 @@ class BuildKernel(object):
         if rootfs is not None:
             logger.debug("updating rootfs")
             if os.path.exists(rootfs):
-                self.use_init_ramfs = True
+                self.use_initramfs = True
                 self.rootfs_src = rootfs
             else:
                 logger.error("rootfs dir %s does not exist", rootfs)
@@ -212,7 +219,9 @@ class BuildKernel(object):
         if threads is not None:
             self.no_threads = threads
 
-        self.__set_build_env__()
+        self.__out_dir_update__(out)
+
+        self.__config_update__(config)
 
         logger.info(self.__str_build_params__())
 
@@ -223,9 +232,7 @@ class BuildKernel(object):
         :return: Throws exception if the config_list input is invaid.
         '''
 
-        self.__set_build_env__()
-
-        if not os.path.exists(self.config):
+        if not os.path.join(self.out, '.config'):
             logger.error("please first set config file using set_build_env() func\n")
             raise AttributeError
 
@@ -246,10 +253,6 @@ class BuildKernel(object):
                 if not config_option[0].startswith("CONFIG_"):
                     logger.error("config option should start with CONFIG_")
                     raise AttributeError
-                # config option value check
-                if config_option[1] not in ['y', 'm', 'n']:
-                    logger.error("config option value should be y/m/n")
-                    raise AttributeError
 
                 logger.debug("updating " + config)
 
@@ -269,6 +272,26 @@ class BuildKernel(object):
         self.config =  os.path.join(self.out,'.config')
         config_temp.close()
 
+    def __update_config_initramfs__(self, rootfs):
+        if not os.path.exists(rootfs):
+            logger.error("rootfs dir does not exist\n")
+            raise AttributeError
+
+        if not os.path.join(self.out, '.config'):
+            logger.error("missing config file\n")
+            raise AttributeError
+
+        config_option = "CONFIG_INITRAMFS_SOURCE="
+        config_option += rootfs
+        update_command = [os.path.join(self.kernel_dir, "scripts", "config")]
+        update_command.append("--file")
+        update_command.append(os.path.join(self.out, '.config'))
+        update_command.append("--set-str")
+        update_command.append("CONFIG_INITRAMFS_SOURCE")
+        update_command.append(rootfs)
+        exec_command(update_command)
+        #self.update_config_options([config_option])
+
     def __exec_cmd__(self, cmd, log=False):
         if log is True:
             self.out_log.seek(0)
@@ -281,8 +304,7 @@ class BuildKernel(object):
             return exec_command(cmd)
 
     def __make_cmd__(self, cmd="", flags=[], log=False):
-        # setup build environment
-        self.__set_build_env__()
+        self.__out_dir_update__()
         # check for input validity
         if type(flags) is not list:
                 raise Exception("Invalid make flags")
@@ -319,6 +341,9 @@ class BuildKernel(object):
             self.make_oldconfig(flags, log)
         else:
             self.make_defconfig(flags, log)
+
+        if self.use_initramfs:
+            self.__update_config_initramfs__(self.rootfs_src)
 
         return self.__make_cmd__(flags=flags, log=log)
 
