@@ -281,16 +281,20 @@ class BuildKernel(object):
             logger.error("missing config file\n")
             raise AttributeError
 
-        config_option = "CONFIG_INITRAMFS_SOURCE="
-        config_option += rootfs
         update_command = [os.path.join(self.kernel_dir, "scripts", "config")]
         update_command.append("--file")
         update_command.append(os.path.join(self.out, '.config'))
         update_command.append("--set-str")
         update_command.append("CONFIG_INITRAMFS_SOURCE")
         update_command.append(rootfs)
+        update_command.append("--set-val")
+        update_command.append("CONFIG_INITRAMFS_ROOT_UID")
+        update_command.append(0)
+        update_command.append("--set-val")
+        update_command.append("CONFIG_INITRAMFS_ROOT_UID")
+        update_command.append(0)
+
         exec_command(update_command)
-        #self.update_config_options([config_option])
 
     def __exec_cmd__(self, cmd, log=False):
         if log is True:
