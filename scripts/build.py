@@ -59,12 +59,14 @@ def glob_recursive(root, pattern):
 
     return file_list
 
-def sync_dirs(src, dst, sudo=False):
+def sync_dirs(src, dst, sudo=False, identical=False):
     logger.info("Syncing %s to %s", src, dst)
     if sudo:
         rsync_cmd = ["sudo /usr/bin/rsync -a"]
     else:
         rsync_cmd = ["/usr/bin/rsync -a"]
+    if identical:
+        rsync_cmd.append("--delete")
     rsync_cmd.append(src + "/")
     rsync_cmd.append(dst)
     os.system(' '.join(rsync_cmd))
@@ -208,7 +210,7 @@ class BuildRecipe(object):
     def __build_rootfs__(self):
         logger.info("Building rootfs")
         logger.info("Syncing rootfs")
-        sync_dirs(self.rootfs_src, self.rootfs_out)
+        sync_dirs(self.rootfs_src, self.rootfs_out, identical=True)
         # change host name
         hostname = os.path.join(self.rootfs_out, 'etc', 'hostname')
         with open(hostname, 'w+') as fp:
