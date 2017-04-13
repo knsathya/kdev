@@ -65,6 +65,7 @@ def sync_dirs(src, dst, sudo=False, identical=False):
         rsync_cmd = ["sudo /usr/bin/rsync -a"]
     else:
         rsync_cmd = ["/usr/bin/rsync -a"]
+    rsync_cmd.append("-D")
     if identical:
         rsync_cmd.append("--delete")
     rsync_cmd.append(src + "/")
@@ -210,7 +211,7 @@ class BuildRecipe(object):
     def __build_rootfs__(self):
         logger.info("Building rootfs")
         logger.info("Syncing rootfs")
-        sync_dirs(self.rootfs_src, self.rootfs_out, identical=True)
+        sync_dirs(self.rootfs_src, self.rootfs_out, sudo=True, identical=True)
         # change host name
         hostname = os.path.join(self.rootfs_out, 'etc', 'hostname')
         with open(hostname, 'w+') as fp:
