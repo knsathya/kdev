@@ -76,7 +76,7 @@ def teed_call(cmd_args, **kwargs):
     return p.wait()
 
 def exec_command(cmd, tee_log=False, out_log=sys.stdout, err_log=sys.stderr):
-    logger.info("executing %s", ' '.join(cmd))
+    logger.info("executing %s", ' '.join(map(lambda x: str(x), cmd)))
     if tee_log is False:
         return subprocess.check_call(cmd)
     else:
@@ -289,10 +289,10 @@ class BuildKernel(object):
         update_command.append(rootfs)
         update_command.append("--set-val")
         update_command.append("CONFIG_INITRAMFS_ROOT_UID")
-        update_command.append(0)
+        update_command.append("0")
         update_command.append("--set-val")
-        update_command.append("CONFIG_INITRAMFS_ROOT_UID")
-        update_command.append(0)
+        update_command.append("CONFIG_INITRAMFS_ROOT_GID")
+        update_command.append("0")
 
         exec_command(update_command)
 
