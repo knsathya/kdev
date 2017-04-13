@@ -296,6 +296,21 @@ class BuildKernel(object):
 
         exec_command(update_command)
 
+    def __update_config_efistub__(self):
+        if not os.path.join(self.out, '.config'):
+            logger.error("missing config file\n")
+            raise AttributeError
+
+        update_command = [os.path.join(self.kernel_dir, "scripts", "config")]
+        update_command.append("--file")
+        update_command.append(os.path.join(self.out, '.config'))
+        update_command.append("--enable")
+        update_command.append("CONFIG_EFI")
+        update_command.append("--enable")
+        update_command.append("CONFIG_EFI_STUB")
+
+        exec_command(update_command)
+
     def __exec_cmd__(self, cmd, log=False):
         if log is True:
             self.out_log.seek(0)
@@ -345,6 +360,9 @@ class BuildKernel(object):
             self.make_oldconfig(flags, log)
         else:
             self.make_defconfig(flags, log)
+
+        if self.use_efi_header:
+            self.__update_config_efistub__()
 
         if self.use_initramfs:
             self.__update_config_initramfs__(self.rootfs_src)
