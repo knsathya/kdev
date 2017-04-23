@@ -34,9 +34,11 @@ import argparse
 import tempfile
 from shutil import copyfile, move
 from board_config import KdevBoardConfig
+from mkrootfs import MKBusybox, MKMinrootfs, rootfs_supported
 
 _TOP_DIR = os.getenv("KDEV_TOP", os.getcwd())
-_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(os.getcwd(), "rootfs", "rootfs"))
+_ROOTFS_TOP = os.getenv("KDEV_ROOTFS_TOP", os.path.join(os.getcwd(), "rootfs"))
+_ROOTFS_DIR = os.getenv("KDEV_ROOTFS", os.path.join(_ROOTFS_TOP, "minrootfs", "rootfs"))
 _KERNEL_DIR = os.getenv("KDEV_KERNEL", os.path.join(os.getcwd(), "kernel"))
 _OUT_DIR = os.getenv("KDEV_OUT", os.path.join(os.getcwd(), "out"))
 _KERNEL_OUT_DIR = os.getenv("KDEV_KOBJ_OUT", None)
@@ -107,6 +109,10 @@ class BuildRecipe(object):
         self.gen_cpioimage = False
         self.gen_hdimage = False
         self.kobj = None
+        self.mkrootfs_top = _ROOTFS_TOP
+        self.mkrootfs_class = MKMinrootfs
+        self.mkrootfs_obj = None
+        self.build_rootfs = True
 
         if not os.path.isdir(root):
             logger.warn("%s: invalid build recipe root", root)
@@ -153,14 +159,24 @@ class BuildRecipe(object):
         self.rootfs_name = self.rootfs_options.rootfs_name
         self.gen_cpioimage = self.rootfs_options.gen_cpioimage
         self.gen_hdimage = self.rootfs_options.gen_hdimage
+        self.mkrootfs_class = rootfs_supported(self.rootfs_name)
+
+        if self.mkrootfs_class is None:
+                raise Exception("rootfs %s is not supported", self.rootfs_name)
+
+        self.rootfs_src = os.path.join(_ROOTFS_TOP, self.rootfs_name, "rootfs")
+        if not os.path.exists(self.rootfs_src):
+            raise Exception("rootfs %s source does not exist", self.rootfs_src)
 
     def init_build(self, out=_OUT_DIR, kernel_src=_KERNEL_DIR,
-            rootfs_src=_ROOTFS_DIR, build_efi=False,
+            rootfs_src=None, skip_build_rootfs=False, build_efi=False,
             build_bootimg=False, build_yocto=False):
 
         self.out = out
         self.kernel_src = kernel_src
-        self.rootfs_src = rootfs_src
+        if rootfs_src is not None:
+            self.rootfs_src = rootfs_src
+        self.build_rootfs = not skip_build_rootfs
         # override gen image options
         self.build_efi = True if build_efi else self.build_efi
         self.build_bootimg = True if build_bootimg else self.build_bootimg
@@ -211,6 +227,9 @@ class BuildRecipe(object):
     def __build_rootfs__(self):
         logger.info("Building rootfs")
         logger.info("Syncing rootfs")
+        if self.mkrootfs_class is not None and self.build_rootfs:
+            mkrootfs_obj = self.mkrootfs_class(self.mkrootfs_top)
+            mkrootfs_obj.build_all()
         sync_dirs(self.rootfs_src, self.rootfs_out, sudo=True, identical=True)
         # change host name
         hostname = os.path.join(self.rootfs_out, 'etc', 'hostname')
@@ -367,7 +386,7 @@ def check_env(kernel_dir, rootfs_dir, out_dir):
         raise IOError
 
     #check if rootfs is valid
-    if not os.path.exists(os.path.expanduser(rootfs_dir)):
+    if rootfs_dir is not None and not os.path.exists(os.path.expanduser(rootfs_dir)):
         logger.error("dir %s does not exist", rootfs_dir)
         raise IOError
 
@@ -383,7 +402,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-r', '--rootfs-dir', action='store', dest='rootfs_dir',
                         type=lambda x: is_valid_directory(parser, x),
-                        default=_ROOTFS_DIR,
+                        default=None,
                         help='rootfs directory')
 
     parser.add_argument('-o', '--out-dir', action='store', dest='out_dir',
@@ -397,6 +416,9 @@ if __name__ == '__main__':
                         help='target recipe directory')
 
     parser.add_argument('--build-efi', action='store_true', dest='build_efi_image', help='Build efi image')
+
+    parser.add_argument('--skip-build-rootfs', action='store_true', dest='skip_build_rootfs', default=False,
+                        help='skip building rootfs')
 
     parser.add_argument('--log', action='store_true', default=False, dest='use_log',
                         help='logs to file')
@@ -414,7 +436,7 @@ if __name__ == '__main__':
     recipe = select_build_target(args.recipe_dir)
 
     recipe.init_build(args.out_dir, args.kernel_dir,
-            args.rootfs_dir, args.build_efi_image)
+            args.rootfs_dir, args.skip_build_rootfs, args.build_efi_image)
 
     recipe.start_build()
 
