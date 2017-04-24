@@ -172,7 +172,7 @@ class BuildRecipe(object):
             rootfs_src=None, skip_build_rootfs=False, build_efi=False,
             build_bootimg=False, build_yocto=False):
 
-        self.out = out
+        self.out = out if out is not None else _OUT_DIR
         self.kernel_src = kernel_src
         if rootfs_src is not None:
             self.rootfs_src = rootfs_src
@@ -407,7 +407,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-o', '--out-dir', action='store', dest='out_dir',
                         type=lambda x: is_valid_directory(parser, x),
-                        default=_OUT_DIR,
+                        default=None,
                         help='out directory')
 
     parser.add_argument('-t', '--target-recipe', action='store', dest='recipe_dir',
