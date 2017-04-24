@@ -103,6 +103,8 @@ class BuildRecipe(object):
         self.build_efi = False
         self.build_bootimg = False
         self.build_yocto = False
+        self.cross_compile = False
+        self.compiler_prefix = ""
         #rootfs options
         self.rootfs_name = "busybox"
         self.use_initramfs = False
@@ -155,6 +157,10 @@ class BuildRecipe(object):
         self.build_efi = self.build_options.build_efi
         self.build_bootimg = self.build_options.build_bootimg
         self.build_yocto = self.build_options.build_yocto
+        self.compiler_prefix = self.build_options.cross_compile
+        if self.compiler_prefix != "":
+            self.cross_compile = True
+
         self.use_initramfs = self.rootfs_options.use_initramfs
         self.rootfs_name = self.rootfs_options.rootfs_name
         self.gen_cpioimage = self.rootfs_options.gen_cpioimage
@@ -216,6 +222,8 @@ class BuildRecipe(object):
         logger.info("Building kernel")
         kobj = BuildKernel(self.kernel_src)
         kobj.set_build_env(arch=self.target_arch,
+                cross_compile=self.cross_compile,
+                compiler_prefix=self.compiler_prefix,
                 config=self.kernel_config,
                 use_efi_header=self.build_efi,
                 rootfs=self.rootfs_out if self.use_initramfs else None,

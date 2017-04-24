@@ -137,6 +137,7 @@ class BoardCfgParser(SafeConfigParser, object):
             "build_efi" : "getboolean",
             "build_bootimg" : "getboolean",
             "build_yocto" : "getboolean",
+            "cross_compile" : "get",
             "kernel_config" : "getfilename",
             "kernel_diffconfig" : "getfilename",
             "cmdline" : "getfilename"
@@ -177,13 +178,15 @@ class BoardCfgParser(SafeConfigParser, object):
         val = self.get(section, option)
         if val == '':
             return None
-        else:
+        if val[0] == '.':
             return os.path.abspath(os.path.join(self.cfg_path, val))
+        else:
+            return os.path.abspath(val)
 
     def __is_valid__(self, name, def_opts):
         options = set(self.options(name))
         defaults = set(def_opts)
-        if options != defaults:
+        if not defaults.issubset(options):
             err = ', '.join(options-defaults)
             raise Exception("missing %s options %s" % (name, err))
 
@@ -276,8 +279,8 @@ class KdevBoardConfig(object):
         self.cfg = cfg
 
         # create a parser object
-        self.parser = BoardCfgParser(interpolation=
-                ExtendedInterpolation())
+        self.parser = BoardCfgParser(os.environ,
+                interpolation = ExtendedInterpolation())
         self.parser.read(cfg)
 
         self.board_options = self.parser.get_board_options()

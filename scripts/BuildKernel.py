@@ -136,6 +136,8 @@ class BuildKernel(object):
         self.target_arch = "x86_64"
         self.no_threads = multiprocessing.cpu_count()
         self.rootfs_src = "No initramfs"
+        self.cross_compile = False
+        self.compiler_prefix = ""
         self.out = os.path.join(os.getcwd(), "out")
 
         # Initalize config params
@@ -173,7 +175,8 @@ class BuildKernel(object):
         self.out = out
         self.config = os.path.join(self.out, '.config')
 
-    def set_build_env(self, arch="x86_64", config=None, use_efi_header=False, rootfs=None, out=None, threads=multiprocessing.cpu_count()):
+    def set_build_env(self, arch="x86_64", cross_compile=False, compiler_prefix="", config=None,
+            use_efi_header=False, rootfs=None, out=None, threads=multiprocessing.cpu_count()):
         '''
         Set the build parameters for compilation.
         :param arch: Architecture to be used in compilation.
@@ -209,6 +212,10 @@ class BuildKernel(object):
             else:
                 logger.error("config file does not exist")
                 raise AttributeError
+
+        if cross_compile:
+            self.cross_compile = cross_compile
+            self.compiler_prefix = compiler_prefix
 
         if use_efi_header is not None:
             self.use_efi_header = use_efi_header
@@ -328,8 +335,10 @@ class BuildKernel(object):
         if type(flags) is not list:
                 raise Exception("Invalid make flags")
         mkcmd = ["/usr/bin/make"]
-        mkcmd.append("ARCH="+ self.target_arch)
         mkcmd.append("-j" + str(self.no_threads))
+        mkcmd.append("ARCH="+ self.target_arch)
+        if self.cross_compile:
+            mkcmd.append("CROSS_COMPILE="+ self.compiler_prefix)
         mkcmd.append("O=" + self.out)
         mkcmd.append("-C")
         mkcmd.append(self.kernel_dir)
