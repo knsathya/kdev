@@ -108,6 +108,7 @@ class BuildRecipe(object):
         #rootfs options
         self.rootfs_name = "busybox"
         self.use_initramfs = False
+        self.support_adb = False
         self.gen_cpioimage = False
         self.gen_hdimage = False
         self.kobj = None
@@ -163,6 +164,7 @@ class BuildRecipe(object):
 
         self.use_initramfs = self.rootfs_options.use_initramfs
         self.rootfs_name = self.rootfs_options.rootfs_name
+        self.support_adb = self.rootfs_options.support_adb
         self.gen_cpioimage = self.rootfs_options.gen_cpioimage
         self.gen_hdimage = self.rootfs_options.gen_hdimage
         self.mkrootfs_class = rootfs_supported(self.rootfs_name)
@@ -236,7 +238,7 @@ class BuildRecipe(object):
         logger.info("Building rootfs")
         logger.info("Syncing rootfs")
         if self.mkrootfs_class is not None and self.build_rootfs:
-            mkrootfs_obj = self.mkrootfs_class(self.mkrootfs_top)
+            mkrootfs_obj = self.mkrootfs_class(self.mkrootfs_top, support_adb=self.support_adb)
             mkrootfs_obj.build_all()
         sync_dirs(self.rootfs_src, self.rootfs_out, sudo=True, identical=True)
         # change host name
