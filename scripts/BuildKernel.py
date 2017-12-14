@@ -363,6 +363,18 @@ class BuildKernel(object):
         if self.__make_cmd__("defconfig", flags, log):
             self.config =  os.path.join(self.out,'.config')
 
+    def make_allyesconfig(self, flags=[], log=False):
+        if self.__make_cmd__("allyesconfig", flags, log):
+            self.config =  os.path.join(self.out,'.config')
+
+    def make_allnoconfig(self, flags=[], log=False):
+        if self.__make_cmd__("allnoconfig", flags, log):
+            self.config =  os.path.join(self.out,'.config')
+
+    def make_allmodconfig(self, flags=[], log=False):
+        if self.__make_cmd__("allmodconfig", flags, log):
+            self.config =  os.path.join(self.out,'.config')
+
     # return true on success
     def make_kernel(self, flags=[], log=False):
         if self.config is not None:
