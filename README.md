@@ -15,10 +15,10 @@ Kdev is a python based Linux kernel build script. You can use this script to bui
 
 #### Library requirements
 > python > 2.7    
-> sudo apt-get install virtualenv
-> mkdir ~/pyenv
-> virtualenv --python=python2.7 ~/pyenv
-> source ~/pyenv/bin/activate
+> sudo apt-get install virtualenv    
+> mkdir ~/pyenv    
+> virtualenv --python=python2.7 ~/pyenv    
+> source ~/pyenv/bin/activate    
 > pip install -r scripts/requirements.txt  
 
 ## How to build
