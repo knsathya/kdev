@@ -15,12 +15,16 @@ Kdev is a python based Linux kernel build script. You can use this script to bui
 
 #### Library requirements
 > python > 2.7    
+> sudo apt-get install virtualenv
+> mkdir ~/pyenv
+> virtualenv --python=python2.7 ~/pyenv
+> source ~/pyenv/bin/activate
 > pip install -r scripts/requirements.txt  
 
 ## How to build
 
 First set your environment by sourcing scripts/setenv.sh  
-> source scripts/setenv.sh
+> source ~/pyenv/bin/activate; source scripts/setenv.sh
 
 You can build kdev image(rootfs + bzImage) by executing the build.py. Before you run this script you should make sure you have valid "kernel" project checked out out in the current directory.
 > python build.py
