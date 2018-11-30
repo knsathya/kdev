@@ -136,14 +136,13 @@ To test the kernel on target device create a USB drive with two partitions one f
 Unmount and eject the drive. Your drive is ready to be used as a EFI bootable disk . To boot from USB from EFI shell, execute a startup.nsh with the boot command. A sample startup.nsh script content is shown below
 
 @echo -off
+
 mode 80 25
+
 ;clean the screen
+
 cls
 fs0:
-echo "============================================================="
-echo "This script will load the kernel"
-echo "============================================================="
-pause 
 echo "Loading the kernel............"
 bzImage.efi root=/dev/sda2 rw console=ttyS2,115200n8 rootwait init=/sbin/init
 echo "........Done "
