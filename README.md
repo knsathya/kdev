@@ -112,3 +112,42 @@ Following is the board.cfg format.
     pagesize = 4096
     use_id = false
 
+## Testing kernel+rootfs on target device
+
+To test the kernel on target device create a USB drive with two partitions one for bzImage.efi (boot) and another to host the rootfs (linux filesystem) using the fdisk utility
+
+1. Connect USB drive to Linux host machine
+2. Check mount node name (ex . /dev/sde )
+    > dmesg | tail -20
+3. Create partitions
+    > fdisk /dev/sde
+4. Choose option n to create new partition of a desired size
+5. Choose option n again to create another partition
+6. Save changes and exit fdisk utility
+7. Format the first partition with vfat type
+    > sudo mkfs.vfat -I -n BOOT /dev/sdx1 (here x to be changed with your device node number)
+8. Format the second partion using ext4
+    > sudo mkfs.ext4 -v -L ROOTFS /dev/sdx2
+9. Copy bzImage to first partition
+    > sudo mount /dev/sdx1 boot
+    > sudo cp bzImage boot
+10. Write Rootfs contents to second partition
+    > dd if=rootfs.img.ext2 of=/dev/sdx2 bs=4096 conv=noerror
+
+11. Unmount and eject the drive. Your drive is ready to be used as a EFI bootable disk . To boot from USB from EFI shell, execute a   startup.nsh with the boot command. A sample startup.nsh script content is shown below
+
+        @echo -off
+        mode 80 25
+        ;clean the screen
+
+        cls
+        fs0:
+        echo "Loading the kernel............"
+        bzImage.efi root=/dev/sda2 rw console=ttyS2,115200n8 rootwait init=/sbin/init
+        echo "........Done "
+        echo "Kernel loading Completed"
+        :END
+
+
+
+
