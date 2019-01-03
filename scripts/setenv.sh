@@ -1,7 +1,0 @@
-#!/bin/sh
-
-export PATH=$PWD/scripts:$PATH
-export KDEV_TOP=$PWD
-export KDEV_ROOTFS_TOP=$PWD/rootfs
-export KDEV_ROOTFS_SCRIPTS=$KDEV_ROOTFS_TOP/scripts
-export PYTHONPATH=$KDEV_ROOTFS_SCRIPTS/:$PYTHONPATH

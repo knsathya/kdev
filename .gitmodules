@@ -1,4 +1,0 @@
-[submodule "rootfs"]
-	path = rootfs
-	url = https://github.com/knsathya/rootfs.git
-	branch = master
