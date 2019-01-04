@@ -40,7 +40,7 @@ To get more info on various options of build.py,
       -k, --kernel-src PATH   Kernel source
       -o, --out PATH
       --rootfs-src PATH
-      -r, --reciepe-dir PATH
+      -r, --recipe-dir PATH
       --debug / --no-debug
       --help                  Show this message and exit.
 

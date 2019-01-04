@@ -180,6 +180,9 @@ class KdevBuild(object):
 
         self.robj.set_hostname(self.rparams["hostname"])
 
+        if os.path.exists(os.path.join(self.recipedir, 'rootfs-updates')):
+            self.robj.update_rootfs(os.path.join(self.recipedir, 'rootfs-updates'), self.rout)
+
         return True
 
     def gen_image(self):
