@@ -35,22 +35,22 @@ Once you run this script, it will parse the target-recipes folder and will displ
 To get more info on various options of build.py,
 > python build.py -h
 
-Usage: kdevimg [OPTIONS] COMMAND1 [ARGS]... [COMMAND2 [ARGS]...]...
+    Usage: kdevimg [OPTIONS] COMMAND1 [ARGS]... [COMMAND2 [ARGS]...]...
 
-Options:
-  -k, --kernel-src PATH   Kernel source
-  -o, --out PATH
-  --rootfs-src PATH
-  -r, --reciepe-dir PATH
-  --debug / --no-debug
-  --help                  Show this message and exit.
+    Options:
+      -k, --kernel-src PATH   Kernel source
+      -o, --out PATH
+      --rootfs-src PATH
+      -r, --reciepe-dir PATH
+      --debug / --no-debug
+      --help                  Show this message and exit.
 
-Commands:
-  build-all      build all
-  build-kernel   build only kernel
-  build-rootfs   build only rootfs
-  gen-image      Generate images
-  udpate-rootfs  Update rootfs
+    Commands:
+      build-all      build all
+      build-kernel   build only kernel
+      build-rootfs   build only rootfs
+      gen-image      Generate images
+      udpate-rootfs  Update rootfs
 
 After successfully running this script, it will generate the kdev images in the "out" folder. For example, for bxt_joule_pr0, you can find images under,
 > out/bxt_joule_pr0/images
