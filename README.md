@@ -35,26 +35,22 @@ Once you run this script, it will parse the target-recipes folder and will displ
 To get more info on various options of build.py,
 > python build.py -h
 
-    usage: build.py [-h] [-k KERNEL_DIR] [-r ROOTFS_DIR] [-o OUT_DIR]
-                    [-t RECIPE_DIR] [--build-efi] [--skip-build-rootfs] [--log]
-                    [-v]
+Usage: kdevimg [OPTIONS] COMMAND1 [ARGS]... [COMMAND2 [ARGS]...]...
 
-    kdev build app
+Options:
+  -k, --kernel-src PATH   Kernel source
+  -o, --out PATH
+  --rootfs-src PATH
+  -r, --reciepe-dir PATH
+  --debug / --no-debug
+  --help                  Show this message and exit.
 
-    optional arguments:
-      -h, --help            show this help message and exit
-      -k KERNEL_DIR, --kernel-dir KERNEL_DIR
-                            kernel source directory
-      -r ROOTFS_DIR, --rootfs-dir ROOTFS_DIR
-                            rootfs directory
-      -o OUT_DIR, --out-dir OUT_DIR
-                            out directory
-      -t RECIPE_DIR, --target-recipe RECIPE_DIR
-                            target recipe directory
-      --build-efi           Build efi image
-      --skip-build-rootfs   skip building rootfs
-      --log                 logs to file
-      -v, --version         show program's version number and exit
+Commands:
+  build-all      build all
+  build-kernel   build only kernel
+  build-rootfs   build only rootfs
+  gen-image      Generate images
+  udpate-rootfs  Update rootfs
 
 After successfully running this script, it will generate the kdev images in the "out" folder. For example, for bxt_joule_pr0, you can find images under,
 > out/bxt_joule_pr0/images
