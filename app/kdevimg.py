@@ -78,8 +78,6 @@ def cli(ctx, kernel_src, out, rootfs_src, recipe_dir, recipe_root, debug):
 
         recipe_list = reduce(lambda l, x: l if x[0] in [i[0] for i in l] else l + [x], recipe_list, [])
 
-        print recipe_list
-
         if len(recipe_list) > 0:
             print("select one of the following recipe")
             for index, recipe in enumerate(recipe_list):
