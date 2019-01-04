@@ -30,7 +30,7 @@ import fnmatch
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(format='%(message)s')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 @click.group(chain=True)
 @click.option('--kernel-src', '-k', type=click.Path(), default=os.path.join(os.getcwd(), 'kernel'), help='Kernel source')
