@@ -49,8 +49,8 @@ def cli(ctx, kernel_src, out, rootfs_src, recipe_dir, recipe_root, debug):
     ctx.obj['RECIPE_ROOT'] = list(recipe_root)
     ctx.obj['DEBUG'] = debug
 
-    ctx.obj['RECIPE_ROOT'].append(pkg_resources.resource_filename('kdev', 'recipes'))
     ctx.obj['RECIPE_ROOT'].append(os.path.join(os.path.expanduser("~"), '.kdev-recipes'))
+    ctx.obj['RECIPE_ROOT'].append(pkg_resources.resource_filename('kdev', 'recipes'))
 
     if ctx.obj['DEBUG']:
         logger.level = logging.DEBUG
@@ -75,6 +75,10 @@ def cli(ctx, kernel_src, out, rootfs_src, recipe_dir, recipe_root, debug):
 
         for config in config_list:
             recipe_list.append((get_recipe_name(os.path.dirname(config), logger), os.path.dirname(config)))
+
+        recipe_list = reduce(lambda l, x: l if x[0] in [i[0] for i in l] else l + [x], recipe_list, [])
+
+        print recipe_list
 
         if len(recipe_list) > 0:
             print("select one of the following recipe")
