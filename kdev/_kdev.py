@@ -193,7 +193,7 @@ class KdevBuild(object):
 
         self.robj.gen_image(self.oparams["rimage-type"], os.path.join(self.iout, self.oparams["rimage-name"]))
 
-        copy2(os.path.join(self.kobj, 'arch', self.kparams["arch_name"], 'boot/bzImage'),
+        copy2(os.path.join(self.kout, 'arch', self.kparams["arch_name"], 'boot/bzImage'),
               os.path.join(self.iout, self.oparams["kimage-name"]))
 
         return True
