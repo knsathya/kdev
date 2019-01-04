@@ -1,0 +1,202 @@
+{
+    "$schema": "http://json-schema.org/draft-06/schema",
+    "description": "kdev schema",
+    "type": "object",
+    "properties": {
+        "required": [
+            "recipe-name",
+            "kernel-params",
+            "rootfs-params"
+        ],
+        "recipe-name": {
+            "type": "string",
+            "description": "Name of the recipe"
+        },
+        "kernel-params": {
+            "type": "object",
+            "description": "kernel build params",
+            "required": [
+                "arch_name"
+            ],
+            "properties": {
+                "build": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "arch_name": {
+                    "description": "ARCH name used for compilation",
+                    "enum": [
+                        "x86_64",
+                        "i386",
+                        "arm64"
+                    ]
+                },
+                "use-initramfs": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "config-file": {
+                    "type": "string",
+                    "description": "Kernel config file",
+                    "default": "kernel.config"
+                },
+                "compiler_options": {
+                    "description": "Compiler Options",
+                    "type": "object",
+                    "properties": {
+                        "CC": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "cflags": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "default": []
+                        }
+                    },
+                    "default": {
+                        "CC": "",
+                        "cflags": []
+                    }
+                }
+            }
+        },
+        "rootfs-params": {
+            "type": "object",
+            "required": [
+                "rootfs-name"
+            ],
+            "build": {
+                "type": "boolean",
+                "default": true
+            },
+            "hostname": {
+                "type": "string",
+                "description": "Hostname",
+                "default": "busybox"
+            },
+            "rootfs-name": {
+                "type": "string",
+                "description": "Name of the rootfs",
+                "enum": [
+                    "busybox",
+                    "minrootfs"
+                ],
+                "default": "busybox"
+            },
+            "rootfs-config": {
+                "type": "string",
+                "description": "Rootfs config file",
+                "default": "rootfs.config"
+            },
+            "rootfs-branch": {
+                "type": "string",
+                "description": "Rootfs branch name",
+                "default": "master"
+            },
+            "adb-gadget": {
+                "description": "ADB gadget",
+                "type": "object",
+                "properties": {
+                    "enable": {
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "manufacturer": {
+                        "type": "string",
+                        "default": "Intel"
+                    },
+                    "product": {
+                        "type": "string",
+                        "default": "KDEV"
+                    },
+                    "vendorid": {
+                        "type": "string",
+                        "default": "0x8087"
+                    },
+                    "productid": {
+                        "type": "string",
+                        "default": "0x0a5f"
+                    }
+                }
+            },
+            "zero-gadget": {
+                "type": "boolean",
+                "default": false
+            }
+        },
+        "out-image": {
+            "description": "Generate Rootfs image",
+            "type": "object",
+            "properties": {
+                "enable": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "image-type": {
+                    "description": "Rootfs image type",
+                    "enum": [
+                        "ext2",
+                        "ext3",
+                        "ext4",
+                        "cpio"
+                    ],
+                    "default": "ext2"
+                },
+                "image-name": {
+                    "type": "string",
+                    "description": "Image name",
+                    "default": "bootimg.ext2"
+                }
+            }
+        },
+        "bootimg-params": {
+            "type": "object",
+            "description": "bootimg params",
+            "properties": {
+                "build": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "base": {
+                    "type": "string",
+                    "default": "0x10000000"
+                },
+                "kernel-offset": {
+                    "type": "string",
+                    "default": "0x00008000"
+                },
+                "ramdisk-offset": {
+                    "type": "string",
+                    "default": "0x01000000"
+                },
+                "second-offset": {
+                    "type": "string",
+                    "default": ""
+                },
+                "os-version": {
+                    "type": "string",
+                    "default": "v1.0"
+                },
+                "os-patch-level": {
+                    "type": "integer",
+                    "default": 1
+                },
+                "tags_offset": {
+                    "type": "integer",
+                    "default": 0
+                },
+                "pagesize": {
+                    "type": "integer",
+                    "default": 4096
+                },
+                "use-id": {
+                    "type": "boolean",
+                    "default": false
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,34 @@
+{
+    "recipe-name": "qemu-x86_64",
+    "kernel-params": {
+        "arch_name": "x86_64",
+        "build": true,
+        "use-initramfs": true,
+        "compiler_options": {
+            "CC": "",
+            "cflags": []
+        },
+        "config-file": "kernel.config"
+    },
+    "rootfs-params": {
+        "hostname": "qemu",
+        "rootfs-name": "busybox",
+        "rootfs-config": "1_29_stable.config",
+        "rootfs-branch": "1_29_stable",
+        "build": true,
+        "adb-gadget": {
+            "enable": false
+        },
+        "zero-gadget": {
+            "enable": false
+        }
+    },
+    "out-image": {
+        "enable": true,
+        "image-type": "ext2",
+        "image-name": "bootimg.ext2"
+    },
+    "bootimg-params": {
+        "build": false
+    }
+}
