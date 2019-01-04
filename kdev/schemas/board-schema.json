@@ -135,7 +135,7 @@
                     "type": "boolean",
                     "default": false
                 },
-                "image-type": {
+                "rimage-type": {
                     "description": "Rootfs image type",
                     "enum": [
                         "ext2",
@@ -145,10 +145,20 @@
                     ],
                     "default": "ext2"
                 },
-                "image-name": {
+                "rimage-name": {
                     "type": "string",
                     "description": "Image name",
                     "default": "bootimg.ext2"
+                },
+                "kimage-name": {
+                    "type": "string",
+                    "description": "Kernel image name",
+                    "default": "kernel.img"
+                },
+                "bimage-name": {
+                    "type": "string",
+                    "description": "Boot image name",
+                    "default": "boot.img"
                 }
             }
         },

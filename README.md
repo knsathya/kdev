@@ -26,7 +26,7 @@ First set your environment by sourcing scripts/setenv.sh
 > source ~/pyenv/bin/activate;
 
 You can build kdev image(rootfs + bzImage) by executing the kdevimg. Before you run this script you should make sure you have valid "kernel" project checked out out in the kernel directory.
-> kdevimg
+> kdevimg -k <KERNEL_DIR> -o <OUT_DIR> --rootfs-src <ROOTFS_SRC> -r <RECIPE_DIR> build-all
 
 Once you run this script, it will parse the target-recipes folder and will display the list of valid build targets and request user to select the build target. You can also skip this selection by passing the recipe dir directly.
 > kdevimg -r $RECIPE_DIR
@@ -58,23 +58,23 @@ Following are the list of out dir content.
 * images/bzImage.efi     - kernel image with EFI stub.
 * out/kernel             - obj directory for kernel.
 * out/rootfs             - copy of rootfs.
-* images/rootfs.img      - cpio.gz format of rootfs image.
+* images/rootfs.img.ext2 - rootfs image in ext2 format.
 * images/rootfs.img.ext2 - rootfs image in ext2 format.
 
 ## How to add a new target recipe
 
 To create a new target recipe, create a separate target folder under $HOME/.kdev-recipes in the following format.
 
-> mkdir $HOME/.kdev-recipes/\<soc\>/\<board\>
+> mkdir $HOME/.kdev-recipes/<TARGET_DIR>/\*
 
 Each target recipe should contain following files. If one of this file is missing, then it will not be considered as a valid target.
 
-> board.cfg - config file to specify board params
+> board.json - config file to specify board params
 > cmdline - kernel command line parameters
 > kernel.config - Target kernel config
->> rootfs.config - Target rootfs config
+> rootfs.config - Target rootfs config
 
-Following is the board.cfg format.
+Following is the board.json format.
 
     {
         "recipe-name": "qemu-x86_64",
@@ -86,13 +86,13 @@ Following is the board.cfg format.
                 "CC": "",
                 "cflags": []
             },
-            "config-file": "kernel.config"
+            "config-file": "kernel.config" //Name of the kernel config file.
         },
         "rootfs-params": {
-            "hostname": "qemu",
+            "hostname": "qemu", // Name of the host
             "rootfs-name": "busybox",
-            "rootfs-config": "1_29_stable.config",
-            "rootfs-branch": "1_29_stable",
+            "rootfs-config": "rootfs.config", // Name of the rootfs config file.
+            "rootfs-branch": "master", // Name of the rootfs git branch.
             "build": true,
             "adb-gadget": {
                 "enable": false
@@ -103,8 +103,9 @@ Following is the board.cfg format.
         },
         "out-image": {
             "enable": true,
-            "image-type": "ext2",
-            "image-name": "bootimg.ext2"
+            "rimage-type": "ext2", //rootfs image type
+            "rimage-name": "bootimg.ext2", // rootfs image name
+            ""kimage-name": "kerenl.img" // kernel image name
         },
         "bootimg-params": {
             "build": false

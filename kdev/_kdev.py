@@ -27,6 +27,7 @@ import pkg_resources
 from klibs import BuildKernel, is_valid_kernel, KernelConfig
 from jsonparser import JSONParser
 from mkrootfs import RootFS, supported_rootfs
+from shutil import copy2
 
 valid_str = lambda x: True if x is not None and isinstance(x, basestring) and len(x) > 0 else False
 
@@ -155,7 +156,6 @@ class KdevBuild(object):
 
         return True
 
-
     def rootfs_update(self):
         if self.robj is None:
             self.logger.error("Invalid rootfs object")
@@ -191,7 +191,10 @@ class KdevBuild(object):
             self.logger.error("Invalid rootfs object")
             return False
 
-        self.robj.gen_image(self.oparams["image-type"], os.path.join(self.iout, self.oparams["image-name"]))
+        self.robj.gen_image(self.oparams["rimage-type"], os.path.join(self.iout, self.oparams["rimage-name"]))
+
+        copy2(os.path.join(self.kobj, 'arch', self.kparams["arch_name"], 'boot/bzImage'),
+              os.path.join(self.iout, self.oparams["kimage-name"]))
 
         return True
 
