@@ -25,8 +25,9 @@
     },
     "out-image": {
         "enable": true,
-        "image-type": "ext2",
-        "image-name": "bootimg.ext2"
+        "rimage-type": "ext2",
+        "rimage-name": "bootimg.ext2",
+        "kimage-name": "kerenl.img"
     },
     "bootimg-params": {
         "build": false

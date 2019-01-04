@@ -9,108 +9,108 @@ Kdev is a python based Linux kernel build script. You can use this script to bui
 ## Enviroment setup
 
 #### Get kdev repo
-> git clone --recursive https://github.com/knsathya/kdev.git
-> cd kdev
-> ln -s [path to your kernel] kernel
+    git clone --recursive https://github.com/knsathya/kdev.git
+    cd kdev
 
 #### Library requirements
-> python > 2.7
-> sudo apt-get install virtualenv
-> mkdir ~/pyenv
-> virtualenv --python=python2.7 ~/pyenv
-> source ~/pyenv/bin/activate
-> pip install -r scripts/requirements.txt
+    python > 2.7
+    sudo apt-get install virtualenv
+    mkdir ~/pyenv
+    virtualenv --python=python2.7 ~/pyenv
+    source ~/pyenv/bin/activate
+    python setup.py install
 
 ## How to build
 
 First set your environment by sourcing scripts/setenv.sh
-> source ~/pyenv/bin/activate; source scripts/setenv.sh
+> source ~/pyenv/bin/activate;
 
-You can build kdev image(rootfs + bzImage) by executing the build.py. Before you run this script you should make sure you have valid "kernel" project checked out out in the current directory.
-> python build.py
+You can build kdev image(rootfs + bzImage) by executing the kdevimg. Before you run this script you should make sure you have valid "kernel" project checked out out in the kernel directory.
+> kdevimg -k <KERNEL_DIR> -o <OUT_DIR> --rootfs-src <ROOTFS_SRC> -r <RECIPE_DIR> build-all
 
-Once you run this script, it will parse the target-recipes folder and will display the list of valid build targets and request user to select the build target. You can also skip this selection by setting the following environment variable.
-> export SELECTED_TARGET_DIR=target-recipes/\<soc\>/\<board\>/
+Once you run this script, it will parse the target-recipes folder and will display the list of valid build targets and request user to select the build target. You can also skip this selection by passing the recipe dir directly.
+> kdevimg -r $RECIPE_DIR
 
 To get more info on various options of build.py,
-> python build.py -h
+> kdevimg --help
 
-    usage: build.py [-h] [-k KERNEL_DIR] [-r ROOTFS_DIR] [-o OUT_DIR]
-                    [-t RECIPE_DIR] [--build-efi] [--skip-build-rootfs] [--log]
-                    [-v]
+    Usage: kdevimg [OPTIONS] COMMAND1 [ARGS]... [COMMAND2 [ARGS]...]...
 
-    kdev build app
+    Options:
+      -k, --kernel-src PATH   Kernel source
+      -o, --out PATH
+      --rootfs-src PATH
+      -r, --recipe-dir PATH
+      --debug / --no-debug
+      --help                  Show this message and exit.
 
-    optional arguments:
-      -h, --help            show this help message and exit
-      -k KERNEL_DIR, --kernel-dir KERNEL_DIR
-                            kernel source directory
-      -r ROOTFS_DIR, --rootfs-dir ROOTFS_DIR
-                            rootfs directory
-      -o OUT_DIR, --out-dir OUT_DIR
-                            out directory
-      -t RECIPE_DIR, --target-recipe RECIPE_DIR
-                            target recipe directory
-      --build-efi           Build efi image
-      --skip-build-rootfs   skip building rootfs
-      --log                 logs to file
-      -v, --version         show program's version number and exit
+    Commands:
+      build-all      build all
+      build-kernel   build only kernel
+      build-rootfs   build only rootfs
+      gen-image      Generate images
+      udpate-rootfs  Update rootfs
 
 After successfully running this script, it will generate the kdev images in the "out" folder. For example, for bxt_joule_pr0, you can find images under,
 > out/bxt_joule_pr0/images
 
 Following are the list of out dir content.
 * images/bzImage.efi     - kernel image with EFI stub.
-* kernel-obj      - obj directory for kernel.
-* rootfs          - copy of rootfs.
-* images/rootfs.img      - cpio.gz format of rootfs image.
+* out/kernel             - obj directory for kernel.
+* out/rootfs             - copy of rootfs.
+* images/rootfs.img.ext2 - rootfs image in ext2 format.
 * images/rootfs.img.ext2 - rootfs image in ext2 format.
 
 ## How to add a new target recipe
 
-To create a new target recipe, create a separate target folder under "target-recipes" in the following format.
+To create a new target recipe, create a separate target folder under $HOME/.kdev-recipes in the following format.
 
-> mkdir target-recipes/\<soc\>/\<board\>
+> mkdir $HOME/.kdev-recipes/<TARGET_DIR>/\*
 
 Each target recipe should contain following files. If one of this file is missing, then it will not be considered as a valid target.
 
-> board.cfg - config file to specify board params
+> board.json - config file to specify board params
 > cmdline - kernel command line parameters
 > kernel.config - Target kernel config
+> rootfs.config - Target rootfs config
 
-Following is the board.cfg format.
+Following is the board.json format.
 
-    [board_options]
-    arch = x86_64
-    soc = bxt
-    board = joule
-    version = pr0
-    target_name = ${soc}_${board}_${version}
-
-    [build_options]
-    build_efi = true
-    build_bootimg = true
-    build_yocto = true
-    kernel_config = ./kernel.config
-    kernel_diffconfig =
-    cmdline = ./cmdline
-
-    [rootfs_options]
-    use_initramfs = false
-    rootfs_name = busybox
-    gen_cpioimage = true
-    gen_hdimage = true
-
-    [bootimg_options]
-    base = 0x10000000
-    kernel_offset = 0x00008000
-    ramdisk_offset = 0x01000000
-    second_offset =
-    os_version = "v1.0"
-    os_patch_level = "1"
-    tags_offset =
-    pagesize = 4096
-    use_id = false
+    {
+        "recipe-name": "qemu-x86_64",
+        "kernel-params": {
+            "arch_name": "x86_64",
+            "build": true,
+            "use-initramfs": true,
+            "compiler_options": {
+                "CC": "",
+                "cflags": []
+            },
+            "config-file": "kernel.config" //Name of the kernel config file.
+        },
+        "rootfs-params": {
+            "hostname": "qemu", // Name of the host
+            "rootfs-name": "busybox",
+            "rootfs-config": "rootfs.config", // Name of the rootfs config file.
+            "rootfs-branch": "master", // Name of the rootfs git branch.
+            "build": true,
+            "adb-gadget": {
+                "enable": false
+            },
+            "zero-gadget": {
+                "enable": false
+            }
+        },
+        "out-image": {
+            "enable": true,
+            "rimage-type": "ext2", //rootfs image type
+            "rimage-name": "bootimg.ext2", // rootfs image name
+            ""kimage-name": "kerenl.img" // kernel image name
+        },
+        "bootimg-params": {
+            "build": false
+        }
+    }
 
 ## Testing kernel+rootfs on target device
 

@@ -34,18 +34,24 @@ logger.setLevel(logging.INFO)
 
 @click.group(chain=True)
 @click.option('--kernel-src', '-k', type=click.Path(), default=os.path.join(os.getcwd(), 'kernel'), help='Kernel source')
-@click.option('--out', '-o', type=click.Path(), default=os.path.join(os.getcwd(), 'out'))
-@click.option('--rootfs-src', type=click.Path(), default=os.path.join(os.getcwd(), 'rootfs'))
-@click.option('--reciepe-dir', '-r', type=click.Path(), default=None)
+@click.option('--out', '-o', type=click.Path(), default=os.path.join(os.getcwd(), 'out'), help='Out directory')
+@click.option('--rootfs-src', type=click.Path(), default=os.path.join(os.getcwd(), 'rootfs'), help='Rootfs source')
+@click.option('--recipe-dir', '-r', type=click.Path(), default=None, help='Recipe Directory')
+@click.option('--recipe-root', type=click.Path(), default=(), multiple=True, help='Additional recipe root')
 @click.option('--debug/--no-debug', default=False)
 @click.pass_context
-def cli(ctx, kernel_src, out, rootfs_src, reciepe_dir, debug):
+def cli(ctx, kernel_src, out, rootfs_src, recipe_dir, recipe_root, debug):
     ctx.obj = {}
     ctx.obj['KSRC'] = kernel_src
     ctx.obj['OUT'] = out
     ctx.obj['ROOTFS_SRC'] = rootfs_src
-    ctx.obj['RECIPE_DIR'] = reciepe_dir
+    ctx.obj['RECIPE_DIR'] = recipe_dir
+    ctx.obj['RECIPE_ROOT'] = list(recipe_root)
     ctx.obj['DEBUG'] = debug
+
+    ctx.obj['RECIPE_ROOT'].append(os.path.join(os.path.expanduser("~"), '.kdev-recipes'))
+    ctx.obj['RECIPE_ROOT'].append(pkg_resources.resource_filename('kdev', 'recipes'))
+
     if ctx.obj['DEBUG']:
         logger.level = logging.DEBUG
 
@@ -59,11 +65,18 @@ def cli(ctx, kernel_src, out, rootfs_src, reciepe_dir, debug):
 
     if ctx.obj['RECIPE_DIR'] is None:
         recipe_list = []
-        config_list = recursive_glob(pkg_resources.resource_filename('kdev', 'recipes'), 'board.json')
-        if os.path.exists(os.path.join(os.path.expanduser("~"), '.kdev-recipes')):
-            config_list +=  recursive_glob(os.path.join(os.path.expanduser("~"), '.kdev-recipes'), 'board.json')
+        config_list = []
+
+        for root in ctx.obj['RECIPE_ROOT']:
+            if os.path.exists(root):
+                config_list += recursive_glob(root, 'board.json')
+
+        config_list = reduce(lambda l, x: l if x in l else l + [x], config_list, [])
+
         for config in config_list:
             recipe_list.append((get_recipe_name(os.path.dirname(config), logger), os.path.dirname(config)))
+
+        recipe_list = reduce(lambda l, x: l if x[0] in [i[0] for i in l] else l + [x], recipe_list, [])
 
         if len(recipe_list) > 0:
             print("select one of the following recipe")
