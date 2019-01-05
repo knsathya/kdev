@@ -148,7 +148,12 @@
                 "rimage-name": {
                     "type": "string",
                     "description": "Image name",
-                    "default": "bootimg.ext2"
+                    "default": "rootfs.img.ext2"
+                },
+                "initramfs-name": {
+                    "type": "string",
+                    "description": "External initramfs archive name",
+                    "default": "rootfs.cpio.gz"
                 },
                 "kimage-name": {
                     "type": "string",
