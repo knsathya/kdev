@@ -1,35 +1,66 @@
 {
     "recipe-name": "qemu-x86_64",
     "kernel-params": {
-        "arch_name": "x86_64",
-        "build": true,
+        "arch-name": "x86_64",
+        "enable-build": true,
         "use-initramfs": true,
-        "compiler_options": {
+        "compiler-options": {
             "CC": "",
             "cflags": []
         },
-        "config-file": "kernel.config"
+        "config-file": "kernel.config",
+        "gen-image": true,
+        "image-name": "kernel.img"
     },
     "rootfs-params": {
+        "name": "busybox",
+        "enable-build": true,
+        "custom-update": true,
+        "custom-update-dir": "updates/rootfs",
         "hostname": "qemu",
-        "rootfs-name": "busybox",
-        "rootfs-config": "1_29_stable.config",
-        "rootfs-branch": "1_29_stable",
-        "build": true,
+        "config-file": "1_29_stable.config",
+        "source-url": "git://git.busybox.net/busybox",
+        "source-branch": "1_29_stable",
+        "arch-name": "x86_64",
+        "compiler-options": {
+            "CC": "",
+            "cflags": []
+        },
         "adb-gadget": {
             "enable": false
         },
         "zero-gadget": {
             "enable": false
-        }
+        },
+        "gen-image": true,
+        "image-type": "ext2",
+        "image-name": "rootfs.img.ext2"
     },
-    "out-image": {
-        "enable": true,
-        "rimage-type": "ext2",
-        "rimage-name": "bootimg.ext2",
-        "kimage-name": "kerenl.img"
+    "initramfs-params": {
+        "name": "minrootfs",
+        "enable-build": true,
+        "custom-update": true,
+        "custom-update-dir": "updates/initramfs",
+        "hostname": "qemu",
+        "config-file": "1_29_stable.config",
+        "source-url": "git://git.busybox.net/busybox",
+        "source-branch": "1_29_stable",
+        "arch-name": "x86_64",
+        "compiler-options": {
+            "CC": "",
+            "cflags": []
+        },
+        "adb-gadget": {
+            "enable": false
+        },
+        "zero-gadget": {
+            "enable": false
+        },
+        "gen-image": true,
+        "image-type": "cpio",
+        "image-name": "initramfs.cpio.gz"
     },
     "bootimg-params": {
-        "build": false
+        "enable-build": false
     }
 }

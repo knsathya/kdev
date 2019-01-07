@@ -16,14 +16,14 @@
             "type": "object",
             "description": "kernel build params",
             "required": [
-                "arch_name"
+                "arch-name"
             ],
             "properties": {
-                "build": {
+                "enable-build": {
                     "type": "boolean",
                     "default": true
                 },
-                "arch_name": {
+                "arch-name": {
                     "description": "ARCH name used for compilation",
                     "enum": [
                         "x86_64",
@@ -40,7 +40,7 @@
                     "description": "Kernel config file",
                     "default": "kernel.config"
                 },
-                "compiler_options": {
+                "compiler-options": {
                     "description": "Compiler Options",
                     "type": "object",
                     "properties": {
@@ -60,120 +60,42 @@
                         "CC": "",
                         "cflags": []
                     }
+                },
+                "gen-image": {
+                    "description": "Generate image",
+                    "type": "boolean",
+                    "default": false
+                },
+                "image-name": {
+                    "type": "string",
+                    "description": "Kernel image name",
+                    "default": "kernel.img"
                 }
             }
         },
         "rootfs-params": {
-            "type": "object",
-            "required": [
-                "rootfs-name"
-            ],
-            "build": {
-                "type": "boolean",
-                "default": true
-            },
-            "hostname": {
-                "type": "string",
-                "description": "Hostname",
-                "default": "busybox"
-            },
-            "rootfs-name": {
-                "type": "string",
-                "description": "Name of the rootfs",
-                "enum": [
-                    "busybox",
-                    "minrootfs"
-                ],
-                "default": "busybox"
-            },
-            "rootfs-config": {
-                "type": "string",
-                "description": "Rootfs config file",
-                "default": "rootfs.config"
-            },
-            "rootfs-branch": {
-                "type": "string",
-                "description": "Rootfs branch name",
-                "default": "master"
-            },
-            "adb-gadget": {
-                "description": "ADB gadget",
-                "type": "object",
-                "properties": {
-                    "enable": {
-                        "type": "boolean",
-                        "default": false
-                    },
-                    "manufacturer": {
-                        "type": "string",
-                        "default": "Intel"
-                    },
-                    "product": {
-                        "type": "string",
-                        "default": "KDEV"
-                    },
-                    "vendorid": {
-                        "type": "string",
-                        "default": "0x8087"
-                    },
-                    "productid": {
-                        "type": "string",
-                        "default": "0x0a5f"
-                    }
-                }
-            },
-            "zero-gadget": {
-                "type": "boolean",
-                "default": false
-            }
+            "$ref": "#/definitions/ rootfs-params"
         },
-        "out-image": {
-            "description": "Generate Rootfs image",
-            "type": "object",
-            "properties": {
-                "enable": {
-                    "type": "boolean",
-                    "default": false
-                },
-                "rimage-type": {
-                    "description": "Rootfs image type",
-                    "enum": [
-                        "ext2",
-                        "ext3",
-                        "ext4",
-                        "cpio"
-                    ],
-                    "default": "ext2"
-                },
-                "rimage-name": {
-                    "type": "string",
-                    "description": "Image name",
-                    "default": "rootfs.img.ext2"
-                },
-                "initramfs-name": {
-                    "type": "string",
-                    "description": "External initramfs archive name",
-                    "default": "rootfs.cpio.gz"
-                },
-                "kimage-name": {
-                    "type": "string",
-                    "description": "Kernel image name",
-                    "default": "kernel.img"
-                },
-                "bimage-name": {
-                    "type": "string",
-                    "description": "Boot image name",
-                    "default": "boot.img"
-                }
-            }
+        "initramfs-params": {
+            "$ref": "#/definitions/ rootfs-params"
         },
         "bootimg-params": {
             "type": "object",
             "description": "bootimg params",
             "properties": {
-                "build": {
+                "enable-build": {
                     "type": "boolean",
                     "default": false
+                },
+                "gen-image": {
+                    "description": "Generate image",
+                    "type": "boolean",
+                    "default": false
+                },
+                "image-name": {
+                    "type": "string",
+                    "description": "Boot image name",
+                    "default": "kernel.img"
                 },
                 "base": {
                     "type": "string",
@@ -199,7 +121,7 @@
                     "type": "integer",
                     "default": 1
                 },
-                "tags_offset": {
+                "tags-offset": {
                     "type": "integer",
                     "default": 0
                 },
@@ -210,6 +132,143 @@
                 "use-id": {
                     "type": "boolean",
                     "default": false
+                }
+            }
+        },
+        "definitions": {
+            "rootfs-params": {
+                "type": "object",
+                "required": [
+                    "name"
+                ],
+                "name": {
+                    "type": "string",
+                    "description": "Name of the rootfs",
+                    "enum": [
+                        "busybox",
+                        "minrootfs"
+                    ],
+                    "default": "busybox"
+                },
+                "enable-build": {
+                    "type": "boolean",
+                    "description": "Build rootfs image.",
+                    "default": true
+                },
+                "custom-update": {
+                    "type": "boolean",
+                    "description": "Update rootfs dir.",
+                    "default": true
+                },
+                "custom-update-dir": {
+                    "type": "string",
+                    "description": "Update rootfs dir name.",
+                    "default": "updates/busybox"
+                },
+                "hostname": {
+                    "type": "string",
+                    "description": "Hostname",
+                    "default": "busybox"
+                },
+                "config-file": {
+                    "type": "string",
+                    "description": "Rootfs config file",
+                    "default": ""
+                },
+                "diffconfig-file": {
+                    "type": "string",
+                    "description": "Rootfs diff config file",
+                    "default": ""
+                },
+                "source-branch": {
+                    "description": "git remote name",
+                    "type": "string",
+                    "default": "master"
+                },
+                "source-url": {
+                    "description": "git remote link of your repository",
+                    "type": "string",
+                    "pattern": "((git|ssh|http(s)?)|(git@[\\w\\.]+))(:(//)?)([\\w\\.@\\:\\-~]+)(/)?",
+                    "default": "git://git.busybox.net/busybox"
+                },
+                "arch-name": {
+                    "description": "ARCH name used for compilation",
+                    "enum": [
+                        "x86_64",
+                        "i386",
+                        "arm64"
+                    ]
+                },
+                "compiler-option": {
+                    "description": "Compiler Options",
+                    "type": "object",
+                    "properties": {
+                        "CC": {
+                            "type": "string",
+                            "default": ""
+                        },
+                        "cflags": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "default": []
+                        }
+                    },
+                    "default": {
+                        "CC": "",
+                        "cflags": []
+                    }
+                },
+                "adb-gadget": {
+                    "description": "ADB gadget",
+                    "type": "object",
+                    "properties": {
+                        "enable": {
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "manufacturer": {
+                            "type": "string",
+                            "default": "Intel"
+                        },
+                        "product": {
+                            "type": "string",
+                            "default": "KDEV"
+                        },
+                        "vendorid": {
+                            "type": "string",
+                            "default": "0x8087"
+                        },
+                        "productid": {
+                            "type": "string",
+                            "default": "0x0a5f"
+                        }
+                    }
+                },
+                "zero-gadget": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "gen-image": {
+                    "description": "Generate image",
+                    "type": "boolean",
+                    "default": false
+                },
+                "image-type": {
+                    "description": "Rootfs image type",
+                    "enum": [
+                        "ext2",
+                        "ext3",
+                        "ext4",
+                        "cpio"
+                    ],
+                    "default": "ext2"
+                },
+                "image-name": {
+                    "type": "string",
+                    "description": "Image name",
+                    "default": "rootfs.img.ext2"
                 }
             }
         }
