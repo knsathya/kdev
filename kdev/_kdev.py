@@ -87,7 +87,7 @@ class KdevBuild(object):
                                  os_env=True, logger=logger)
         self.recipecfg = self.recipe.get_cfg()
 
-        for dirname in [self.rsrc, self.rout, self.kout, self.iout]:
+        for dirname in [self.rsrc, self.rout, self.idir, self.kout, self.iout]:
             if not os.path.exists(dirname):
                 self.logger.warning("dir %s does not exist, so creating it", dirname)
                 os.makedirs(dirname)
@@ -129,7 +129,7 @@ class KdevBuild(object):
         self.iobj.build(self.iparams["source-url"], self.iparams["source-branch"],
                         config, diffconfig, self.iparams["arch-name"],
                         self.iparams["compiler-options"]["CC"],
-                        self.iparams["compiler-options"]["cflags"],
+                        ' '.join(self.iparams["compiler-options"]["cflags"]),
                         )
         return True
 
@@ -147,7 +147,7 @@ class KdevBuild(object):
         cobj = KernelConfig(src=self.kobj.cfg, logger=self.logger)
         config_list = []
         config_list.append('CONFIG_BLK_DEV_INITRD=y')
-        config_list.append('CONFIG_INITRAMFS_SOURCE=%s' % self.rout)
+        config_list.append('CONFIG_INITRAMFS_SOURCE=%s' % self.iobj.idir)
         config_list.append('CONFIG_INITRAMFS_ROOT_UID=0')
         config_list.append('CONFIG_INITRAMFS_ROOT_GID=0')
         cobj.merge_config(config_list)
@@ -162,7 +162,7 @@ class KdevBuild(object):
             self.logger.error(err)
             self.logger.error(out)
 
-        ret, out, err = self.kobj.make_modules_install(flags=["INSTALL_MOD_PATH=%s" % self.idir])
+        ret, out, err = self.kobj.make_modules_install(flags=["INSTALL_MOD_PATH=%s" % self.robj.idir])
 
         status = True if ret == 0 else False
 
@@ -196,7 +196,7 @@ class KdevBuild(object):
         self.robj.build(self.rparams["source-url"], self.rparams["source-branch"],
                         config, diffconfig, self.rparams["arch-name"],
                         self.rparams["compiler-options"]["CC"],
-                        self.rparams["compiler-options"]["cflags"],
+                        ' '.join(self.rparams["compiler-options"]["cflags"]),
                         )
 
         return True
@@ -217,7 +217,7 @@ class KdevBuild(object):
                               gadget["productid"]]))
 
         gadget = self.rparams["zero-gadget"]
-        if gadget["enable"]:
+        if gadget:
             services.append(('zero-gadget', []))
 
         if len(services) > 0:
@@ -225,35 +225,61 @@ class KdevBuild(object):
 
         self.robj.set_hostname(self.rparams["hostname"])
 
-        if os.path.exists(os.path.join(self.recipe_dir, 'rootfs-updates')):
-            self.robj.update_rootfs(os.path.join(self.recipe_dir, 'rootfs-updates'), self.rout)
+        if os.path.exists(os.path.join(self.recipe_dir, "custom-update-dir")):
+            self.robj.update_rootfs(os.path.join(self.recipe_dir, "custom-update-dir"),
+                                    self.robj.idir)
+
+        return True
+
+    def initramfs_update(self):
+        if self.iobj is None:
+            self.logger.error("Invalid initramfs object")
+            return False
+
+        if not self.iparams["custom-update"]:
+            self.logger.warning("Rootfs custom update option is not enabled")
+            return False
+
+        if os.path.exists(os.path.join(self.recipe_dir, self.iparams["custom-update-dir"])):
+            self.iobj.update_rootfs(os.path.join(self.recipe_dir, "custom-update-dir"),
+                                    self.iobj.idir)
 
         return True
 
     def gen_image(self):
-        if not self.oparams["enable"]:
-            self.logger.warning("Generate image option is not enabled")
-            return False
+        if self.rparams["gen-image"]:
+            if self.robj is None:
+                self.logger.error("Invalid rootfs object")
+                return False
+            else:
+                self.robj.gen_image(self.rparams["image-type"], os.path.join(self.iout, self.rparams["image-name"]))
 
-        if self.robj is None:
-            self.logger.error("Invalid rootfs object")
-            return False
+        if self.iparams["gen-image"]:
+            if self.iobj is None:
+                self.logger.error("Invalid initramfs object")
+                return False
+            else:
+                self.iobj.gen_image(self.iparams["image-type"], os.path.join(self.iout, self.iparams["image-name"]))
 
-        self.robj.gen_image(self.oparams["rimage-type"], os.path.join(self.iout, self.oparams["rimage-name"]))
-        self.robj.gen_image("cpio", os.path.join(self.iout, self.oparams["initramfs-name"]))
-
-        copy2(os.path.join(self.kout, 'arch', self.kparams["arch-name"], 'boot/bzImage'),
-              os.path.join(self.iout, self.oparams["kimage-name"]))
+        if self.kparams["gen-image"]:
+            copy2(os.path.join(self.kout, 'arch', self.kparams["arch-name"], 'boot/bzImage'),
+                  os.path.join(self.iout, self.kparams["image-name"]))
 
         return True
 
-    def build(self, kbuild=True, rbuild=True, rupdate=True, gen_image=True):
+    def build(self, kbuild=False, rbuild=False, ibuild=False, rupdate=False, iupdate=False, gen_image=False):
         self.logger.info("Building recipe %s", self.recipecfg["recipe-name"])
         status = True
         if rbuild:
             status = self.rootfs_build()
             if not status:
                 self.logger.error("Rootfs build failed")
+                return status
+
+        if ibuild:
+            status = self.initramfs_build()
+            if not status:
+                self.logger.error("Initramfs build failed")
                 return status
 
         if kbuild:
@@ -266,6 +292,12 @@ class KdevBuild(object):
             status = self.rootfs_update()
             if not status:
                 self.logger.error("Rootfs update failed")
+                return status
+
+        if iupdate:
+            status = self.initramfs_update()
+            if not status:
+                self.logger.error("Initramfs update failed")
                 return status
 
         if gen_image:

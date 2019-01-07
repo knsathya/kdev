@@ -94,35 +94,47 @@ def cli(ctx, kernel_src, out, rootfs_src, recipe_dir, recipe_root, debug):
         logger.error("No valid recipe found")
         raise AttributeError
 
-    ctx.obj['OBJ'] = KdevBuild(ksrcdir=ctx.obj['KSRC'], rsrcdir=ctx.obj['ROOTFS_SRC'], recipedir=ctx.obj['RECIPE_DIR'],
-                               outdir=ctx.obj['OUT'], logger=logger)
+    ctx.obj['OBJ'] = KdevBuild(kernel_dir=ctx.obj['KSRC'], rootfs_dir=ctx.obj['ROOTFS_SRC'], recipe_dir=ctx.obj['RECIPE_DIR'],
+                               out_dir=ctx.obj['OUT'], logger=logger)
 
 @cli.command('build-kernel', short_help='build only kernel')
 @click.pass_context
 def build_kernel(ctx):
     click.echo('Building kernel for recipe %s' % (ctx.obj['OBJ'].recipename))
-    ctx.obj['OBJ'].build(kbuild=True, rbuild=False, rupdate=False, gen_image=False)
+    ctx.obj['OBJ'].build(kbuild=True)
 
 @cli.command('build-rootfs', short_help='build only rootfs')
 @click.pass_context
 def build_rootfs(ctx):
     click.echo('Building rootfs for recipe %s' % (ctx.obj['OBJ'].recipename))
-    ctx.obj['OBJ'].build(kbuild=False, rbuild=True, rupdate=False, gen_image=False)
+    ctx.obj['OBJ'].build(rbuild=True)
 
 @cli.command('udpate-rootfs', short_help='Update rootfs')
 @click.pass_context
-def build_rootfs(ctx):
+def update_rootfs(ctx):
     click.echo('Updating rootfs for recipe %s' % (ctx.obj['OBJ'].recipename))
-    ctx.obj['OBJ'].build(kbuild=False, rbuild=False, rupdate=True, gen_image=False)
+    ctx.obj['OBJ'].build(rupdate=True)
+
+@cli.command('build-initramfs', short_help='build only initramfs')
+@click.pass_context
+def build_initramfs(ctx):
+    click.echo('Building initramfs for recipe %s' % (ctx.obj['OBJ'].recipename))
+    ctx.obj['OBJ'].build(ibuild=True)
+
+@cli.command('udpate-initramfs', short_help='Update initramfs')
+@click.pass_context
+def update_initramfs(ctx):
+    click.echo('Updating initramfs for recipe %s' % (ctx.obj['OBJ'].recipename))
+    ctx.obj['OBJ'].build(iupdate=True)
 
 @cli.command('gen-image', short_help='Generate images')
 @click.pass_context
 def gen_image(ctx):
     click.echo('Generating image for recipe %s' % (ctx.obj['OBJ'].recipename))
-    ctx.obj['OBJ'].build(kbuild=False, rbuild=False, rupdate=False, gen_image=True)
+    ctx.obj['OBJ'].build(gen_image=True)
 
 @cli.command('build-all', short_help='build all')
 @click.pass_context
 def gen_image(ctx):
     click.echo('Building recipe %s' % (ctx.obj['OBJ'].recipename))
-    ctx.obj['OBJ'].build(kbuild=True, rbuild=True, rupdate=True, gen_image=True)
+    ctx.obj['OBJ'].build(kbuild=True, rbuild=True, ibuild=True, rupdate=True, iupdate=True, gen_image=True)

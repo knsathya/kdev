@@ -74,10 +74,10 @@
             }
         },
         "rootfs-params": {
-            "$ref": "#/definitions/ rootfs-params"
+            "$ref": "#/definitions/rootfsparams"
         },
         "initramfs-params": {
-            "$ref": "#/definitions/ rootfs-params"
+            "$ref": "#/definitions/rootfsparams"
         },
         "bootimg-params": {
             "type": "object",
@@ -134,13 +134,15 @@
                     "default": false
                 }
             }
-        },
-        "definitions": {
-            "rootfs-params": {
-                "type": "object",
-                "required": [
-                    "name"
-                ],
+        }
+    },
+    "definitions": {
+        "rootfsparams": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
                 "name": {
                     "type": "string",
                     "description": "Name of the rootfs",
