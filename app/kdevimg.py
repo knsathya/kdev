@@ -109,7 +109,7 @@ def build_rootfs(ctx):
     click.echo('Building rootfs for recipe %s' % (ctx.obj['OBJ'].recipename))
     ctx.obj['OBJ'].build(rbuild=True)
 
-@cli.command('udpate-rootfs', short_help='Update rootfs')
+@cli.command('update-rootfs', short_help='Update rootfs')
 @click.pass_context
 def update_rootfs(ctx):
     click.echo('Updating rootfs for recipe %s' % (ctx.obj['OBJ'].recipename))
@@ -121,7 +121,7 @@ def build_initramfs(ctx):
     click.echo('Building initramfs for recipe %s' % (ctx.obj['OBJ'].recipename))
     ctx.obj['OBJ'].build(ibuild=True)
 
-@cli.command('udpate-initramfs', short_help='Update initramfs')
+@cli.command('update-initramfs', short_help='Update initramfs')
 @click.pass_context
 def update_initramfs(ctx):
     click.echo('Updating initramfs for recipe %s' % (ctx.obj['OBJ'].recipename))
@@ -132,6 +132,16 @@ def update_initramfs(ctx):
 def gen_image(ctx):
     click.echo('Generating image for recipe %s' % (ctx.obj['OBJ'].recipename))
     ctx.obj['OBJ'].build(gen_image=True)
+
+@cli.command('burn-drive', short_help='Burn images to a device')
+@click.option('--dev', type=str, default=None, help='Device node /dev/<node>')
+@click.option('--kernel-partsize', type=int, default=20, help='kernel partition size')
+@click.option('--root-partsize', type=int, default=100, help='kernel partition size')
+@click.option('--force/--no-force', default=False)
+@click.pass_context
+def burn_drive(ctx, dev, kernel_partsize, root_partsize, force):
+    click.echo('Generating image for recipe %s' % (ctx.obj['OBJ'].recipename))
+    ctx.obj['OBJ'].burn_drive(dev, kernel_partsize, root_partsize, force)
 
 @cli.command('build-all', short_help='build all')
 @click.pass_context

@@ -24,10 +24,13 @@
 import os
 import logging
 import pkg_resources
+import re
+import tempfile
 from klibs import BuildKernel, is_valid_kernel, KernelConfig
 from jsonparser import JSONParser
-from mkrootfs import RootFS, supported_rootfs
+from mkrootfs import RootFS
 from shutil import copy2
+from pyshell import PyShell
 
 valid_str = lambda x: True if x is not None and isinstance(x, basestring) and len(x) > 0 else False
 
@@ -225,9 +228,11 @@ class KdevBuild(object):
 
         self.robj.set_hostname(self.rparams["hostname"])
 
-        if os.path.exists(os.path.join(self.recipe_dir, "custom-update-dir")):
-            self.robj.update_rootfs(os.path.join(self.recipe_dir, "custom-update-dir"),
-                                    self.robj.idir)
+        update_dir = self.rparams["custom-update-dir"]
+
+        if os.path.exists(os.path.join(self.recipe_dir, update_dir)):
+            if self.rparams["custom-update"]:
+                self.robj.update_rootfs(os.path.join(self.recipe_dir, update_dir), self.robj.idir)
 
         return True
 
@@ -237,12 +242,14 @@ class KdevBuild(object):
             return False
 
         if not self.iparams["custom-update"]:
-            self.logger.warning("Rootfs custom update option is not enabled")
+            self.logger.warning("Initramfs custom update option is not enabled")
             return False
 
-        if os.path.exists(os.path.join(self.recipe_dir, self.iparams["custom-update-dir"])):
-            self.iobj.update_rootfs(os.path.join(self.recipe_dir, "custom-update-dir"),
-                                    self.iobj.idir)
+        update_dir = self.iparams["custom-update-dir"]
+
+        if os.path.exists(os.path.join(self.recipe_dir, update_dir)):
+            if self.iparams["custom-update"]:
+                self.iobj.update_rootfs(os.path.join(self.recipe_dir, update_dir), self.iobj.idir)
 
         return True
 
@@ -308,3 +315,160 @@ class KdevBuild(object):
 
         return status
 
+    def burn_drive(self, dev, ksize=20, rsize=100, force=False):
+        self.logger.info("Burning %s device to %s", self.recipecfg["recipe-name"], dev)
+
+        if not os.path.exists(dev):
+            self.logger.error("Disk %s does not exist" % dev)
+            return False
+
+        if self.rparams["image-type"] not in ["ext2", "ext3", "ext4"]:
+            self.logger.error("Rootfs image type %s does not support creating boot disk" % self.rparams["image-type"] )
+            return False
+
+        sh = PyShell(logger=self.logger)
+        sh.update_shell()
+
+        ret = sh.cmd("sudo parted %s print free | grep \"Disk %s\" | cut -d' ' -f3" % (dev, dev))
+        if ret[0] != 0:
+            self.logger.error("Getting disk size %s command failed" % dev)
+            return False
+
+        regex = re.compile(r'(\d+(?:\.\d+)?)\s*([kmgtp]?b)', re.IGNORECASE)
+
+        order = ['b', 'kb', 'mb', 'gb', 'tb', 'pb']
+
+        for value, unit in regex.findall(ret[1].strip()):
+            size = int(float(value) * (1024 ** order.index(unit.lower())))
+
+        if size < (1024 * 1024 * 1024 * 4):
+            self.logger.error("Device size should be atleast 4GB")
+            return False
+
+        self.logger.info("Device size is %d" % size)
+
+        if force is False:
+            raw_input("Proceeding further will wipe all data in %s, press enter to continue" % dev)
+
+        ret = sh.cmd("sudo fdisk -l %s | grep '^/dev' | cut -d' ' -f1" % (dev))
+        for part in ret[1].split():
+            ret = sh.cmd("mount | grep %s" % part)
+            if len(ret[1].strip()) == 0:
+                self.logger.info("%s partition is not mounted" % part)
+            else:
+                ret = sh.cmd(("sudo umount %s" % part))
+                if ret[0] != 0 and ret[0] != 32:
+                    self.logger.error(ret)
+                    return False
+                if ret[0] == 32:
+                    self.logger.warn(ret[1])
+
+        sh.cmd("sudo wipefs -a %s" % (dev))
+
+        def format_size(min, max):
+            return str(min) + '%' + ' ' + str(max) + '% '
+
+        ret = sh.cmd("sudo parted %s mklabel msdos" % dev)
+        if ret[0] != 0:
+            self.logger.error("Creating label failed")
+            self.logger.error(ret)
+            return False
+
+        ret = sh.cmd("sudo parted %s mkpart primary fat32 %s" % (dev, format_size(0, ksize)))
+        if ret[0] != 0:
+            self.logger.error("Creating kernel parition failed")
+            self.logger.error(ret)
+            return False
+
+        ret = sh.cmd("sudo parted %s set 1 boot on" % (dev))
+        if ret[0] != 0:
+            self.logger.error("Setting boot parition flag failed")
+            self.logger.error(ret)
+            return False
+
+        ret = sh.cmd("sudo parted %s set 1 esp on" % (dev))
+        if ret[0] != 0:
+            self.logger.error("Setting boot parition flag failed")
+            self.logger.error(ret)
+            return False
+
+        ret = sh.cmd("sudo parted %s mkpart primary ext4 %s" % (dev, format_size(ksize, rsize)))
+        if ret[0] != 0:
+            self.logger.error("Creating rootfs parition failed")
+            self.logger.error(ret)
+            return False
+
+        ret = sh.cmd("sudo fdisk -l %s | grep '^/dev' | cut -d' ' -f1" % (dev))
+
+        if "%s1" % dev not in ret[1].split():
+            self.logger.error("Missing %s1 device" % dev)
+            self.logger.error(ret[1].split())
+            return False
+
+        if "%s2" % dev not in ret[1].split():
+            self.logger.error("Missing %s2 device" % dev)
+            self.logger.error(ret[1].split())
+            return False
+
+        ret = sh.cmd("sudo mkfs.fat -F 32 -n KERNEL -I %s1" % (dev))
+        if ret[0] != 0:
+            self.logger.error("Making kernel fs failed")
+            self.logger.error(ret)
+            return False
+
+        ret = sh.cmd("sudo mkfs.ext4 -L ROOTFS %s2" % (dev))
+        if ret[0] != 0:
+            self.logger.error("Making rootfs fs failed")
+            self.logger.error(ret)
+            return False
+
+        temp_dir = tempfile.mkdtemp()
+
+        cmd_text = ''
+
+        if os.path.exists(os.path.join(self.recipe_dir, 'cmdline.txt')):
+            with open(os.path.join(self.recipe_dir, 'cmdline.txt')) as fobj:
+                cmd_text = fobj.read()
+
+        nshfile = tempfile.NamedTemporaryFile(mode='w+t')
+
+        try:
+            nshfile.write("@echo -off\n")
+            nshfile.write("mode 80 25\n")
+            nshfile.write(";clean the screen\n")
+            nshfile.write("cls\n")
+            nshfile.write("fs0:\n")
+            nshfile.write('echo "============================================================="\n')
+            nshfile.write('echo "This script will load the kernel"\n')
+            nshfile.write('echo "============================================================="\n')
+            nshfile.write("pause\n")
+            nshfile.write('echo "Loading the kernel............"\n')
+            nshfile.write("%s %s\n" % (self.kparams["image-name"], cmd_text.strip()))
+            nshfile.write('echo "........Done "\n')
+            nshfile.write('echo "Kernel loading Completed"\n')
+            nshfile.write(':END\n')
+            nshfile.seek(0)
+            print nshfile.read()
+        finally:
+            sh.cmd("sudo mount -o loop,rw,sync %s1 %s" % (dev, temp_dir))
+            sh.cmd("sudo grub-install --efi-directory %s --boot-directory /boot --target x86_64-efi --removable %s" %
+                   (temp_dir, dev))
+            #sh.cmd("sudo cp %s %s/%s" % (os.path.join(self.kout, 'vmlinux'), temp_dir, self.kparams["image-name"]))
+            sh.cmd("sudo cp %s %s/%s" % (os.path.join(self.iout, self.kparams["image-name"]), temp_dir, self.kparams["image-name"]))
+            sh.cmd("sudo chmod 777 %s" % os.path.join(self.iout, self.kparams["image-name"]))
+            if os.path.exists(os.path.join(temp_dir, 'startup.nsh')):
+                sh.cmd("sudo rm %s" % os.path.join(temp_dir, 'startup.nsh'))
+            sh.cmd("sudo cp %s %s" % (nshfile.name, os.path.join(temp_dir, 'startup.nsh')))
+            sh.cmd("sudo chmod 755 %s" % os.path.join(temp_dir, 'startup.nsh'))
+            sh.cmd(("sudo umount %s" % temp_dir))
+            nshfile.close()
+
+        sh.cmd("sudo mount -o loop,rw,sync %s2 %s" % (dev, temp_dir))
+        sh.cmd("sudo /usr/bin/rsync -a -D %s/ %s" % (self.robj.idir, temp_dir))
+        sh.cmd(("sudo umount %s" % temp_dir))
+        try:
+            os.removedirs(temp_dir)
+        except Exception as e:
+            pass
+
+        return True

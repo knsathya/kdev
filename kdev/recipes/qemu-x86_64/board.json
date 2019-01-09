@@ -28,9 +28,9 @@
             "cflags": []
         },
         "adb-gadget": {
-            "enable": false
+            "enable": true
         },
-        "zero-gadget": false,
+        "zero-gadget": true,
         "gen-image": true,
         "image-type": "ext2",
         "image-name": "rootfs.img.ext2"
