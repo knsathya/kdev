@@ -244,7 +244,7 @@
                         },
                         "productid": {
                             "type": "string",
-                            "default": "0x0a5f"
+                            "default": "0x09ef"
                         }
                     }
                 },
