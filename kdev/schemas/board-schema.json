@@ -79,6 +79,130 @@
         "initramfs-params": {
             "$ref": "#/definitions/rootfsparams"
         },
+        "diskimg-params": {
+            "type": "object",
+            "description": "diskimg params",
+            "properties": {
+                "gen-image": {
+                    "description": "Generate image",
+                    "type": "boolean",
+                    "default": false
+                },
+                "disk-name": {
+                    "type": "string",
+                    "description": "Disk name",
+                    "default": "disk.img"
+                },
+                "disk-size": {
+                    "type": "integer",
+                    "description": "disk size >= 100MB in MB",
+                    "default": 100
+                },
+                "gen-craff-image": {
+                    "description": "Generate craff image",
+                    "type": "boolean",
+                    "default": false
+                },
+                "craff-image-name": {
+                    "type": "string",
+                    "description": "Craff image name",
+                    "default": "disk.craff"
+                },
+                "part-count": {
+                    "type": "integer",
+                    "description": "Number of partitions",
+                    "default": 2
+                },
+                "partitions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "description": "Partition Details",
+                        "properties": {
+                            "part-name": {
+                                "type": "string",
+                                "description": "Partition name",
+                                "default": "disk.img"
+                            },
+                            "part-size": {
+                                "type": "integer",
+                                "description": "Partition size in MB",
+                                "default": 10
+                            },
+                            "part-type": {
+                                "type": "integer",
+                                "description": "Partition type",
+                                "default": 83
+                            },
+                            "part-fstype": {
+                                "description": "Partition fs type",
+                                "enum": [
+                                    "ext2",
+                                    "ext3",
+                                    "ext4",
+                                    "fat16",
+                                    "fat32"
+                                ],
+                                "default": "ext4"
+                            },
+                            "part-fsflags": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "default": []
+                            },
+                            "part-update": {
+                                "type": "boolean",
+                                "description": "Update partition dir.",
+                                "default": true
+                            },
+                            "updates": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "description": "Partition Update Details",
+                                    "properties": {
+                                        "sync-kernel": {
+                                            "type": "boolean",
+                                            "description": "Sync kernel file.",
+                                            "default": false
+                                        },
+                                        "sync-rootfs": {
+                                            "type": "boolean",
+                                            "description": "Sync rootfs",
+                                            "default": false
+                                        },
+                                        "kernel-ddir": {
+                                            "type": "string",
+                                            "description": "Kernel dest dir name.",
+                                            "default": ""
+                                        },
+                                        "update-sdir": {
+                                            "type": "string",
+                                            "description": "Update source dir name.",
+                                            "default": ""
+                                        },
+                                        "update-ddir": {
+                                            "type": "string",
+                                            "description": "Update dest dir name.",
+                                            "default": ""
+                                        }
+                                    }
+                                }
+                            },
+
+                            "install-grub": {
+                                "description": "Install Grub",
+                                "type": "boolean",
+                                "default": false
+                            }
+                        }
+                    },
+                    "default": []
+                }
+            }
+        },
         "bootimg-params": {
             "type": "object",
             "description": "bootimg params",

@@ -135,13 +135,11 @@ def gen_image(ctx):
 
 @cli.command('burn-drive', short_help='Burn images to a device')
 @click.option('--dev', type=str, default=None, help='Device node /dev/<node>')
-@click.option('--kernel-partsize', type=int, default=20, help='kernel partition size')
-@click.option('--root-partsize', type=int, default=100, help='kernel partition size')
 @click.option('--force/--no-force', default=False)
 @click.pass_context
-def burn_drive(ctx, dev, kernel_partsize, root_partsize, force):
+def burn_drive(ctx, dev, force):
     click.echo('Generating image for recipe %s' % (ctx.obj['OBJ'].recipename))
-    ctx.obj['OBJ'].burn_drive(dev, kernel_partsize, root_partsize, force)
+    ctx.obj['OBJ'].burn_drive(dev, force)
 
 @cli.command('build-all', short_help='build all')
 @click.pass_context
